@@ -1,0 +1,27 @@
+dependencies {
+    testImplementation "org.junit.jupiter:junit-jupiter-api:$junit_version"
+
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:$junit_version"
+}
+
+test {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showStandardStreams = true
+    }
+}
+
+compileKotlin {
+    kotlinOptions {
+        freeCompilerArgs = ['-Xjvm-default=enable', "-Xinline-classes"]
+        jvmTarget = '1.8'
+    }
+}
+
+compileTestKotlin {
+    kotlinOptions {
+        freeCompilerArgs = ['-Xjvm-default=enable']
+        jvmTarget = '1.8'
+    }
+}
