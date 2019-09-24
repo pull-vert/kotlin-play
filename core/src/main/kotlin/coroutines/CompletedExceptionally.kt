@@ -1,6 +1,8 @@
 package coroutines
 
 import kotlinx.atomicfu.atomic
+import java.util.concurrent.CancellationException
+import kotlin.coroutines.Continuation
 
 /**
  * Class for an internal state of a job that was cancelled (completed exceptionally).
@@ -16,4 +18,20 @@ internal open class CompletedExceptionally(
     val handled: Boolean get() = _handled.value
     fun makeHandled(): Boolean = _handled.compareAndSet(false, true)
     override fun toString(): String = "$classSimpleName[$cause]"
+}
+
+/**
+ * A specific subclass of [CompletedExceptionally] for cancelled [AbstractContinuation].
+ *
+ * @param continuation the continuation that was cancelled.
+ * @param cause the exceptional completion cause. If `cause` is null, then a [CancellationException]
+ *        if created on first access to [exception] property.
+ */
+internal class CancelledContinuation(
+        continuation: Continuation<*>,
+        cause: Throwable?,
+        handled: Boolean
+) : CompletedExceptionally(cause ?: CancellationException("Continuation $continuation was cancelled normally"), handled) {
+    private val _resumed = atomic(false)
+    fun makeResumed(): Boolean = _resumed.compareAndSet(false, true)
 }

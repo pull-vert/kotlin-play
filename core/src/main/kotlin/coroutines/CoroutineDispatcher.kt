@@ -66,6 +66,11 @@ public abstract class CoroutineDispatcher :
     public final override fun <T> interceptContinuation(continuation: Continuation<T>): Continuation<T> =
             DispatchedContinuation(this, continuation)
 
+//    @InternalCoroutinesApi
+    public override fun releaseInterceptedContinuation(continuation: Continuation<*>) {
+        (continuation as DispatchedContinuation<*>).reusableCancellableContinuation?.detachChild()
+    }
+
     /** @suppress for nicer debugging */
     override fun toString(): String = "$classSimpleName@$hexAddress"
 }

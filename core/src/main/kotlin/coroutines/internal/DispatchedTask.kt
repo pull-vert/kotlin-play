@@ -90,6 +90,95 @@ internal abstract class DispatchedTask<in T>(
     }
 }
 
+internal fun <T> DispatchedTask<T>.dispatch(mode: Int = MODE_CANCELLABLE) {
+    val delegate = this.delegate
+    if (mode.isDispatchedMode && delegate is DispatchedContinuation<*> && mode.isCancellableMode == resumeMode.isCancellableMode) {
+        // dispatch directly using this instance's Runnable implementation
+        val dispatcher = delegate.dispatcher
+        val context = delegate.context
+        if (dispatcher.isDispatchNeeded(context)) {
+            dispatcher.dispatch(context, this)
+        } else {
+            resumeUnconfined()
+        }
+    } else {
+        resume(delegate, mode)
+    }
+}
+
+internal fun <T> DispatchedTask<T>.resume(delegate: Continuation<T>, useMode: Int) {
+    // slow-path - use delegate
+    val state = takeState()
+    val exception = getExceptionalResult(state)
+    if (exception != null) {
+        /*
+         * Recover stacktrace for non-dispatched tasks.
+         * We usually do not recover stacktrace in a `resume` as all resumes go through `DispatchedTask.run`
+         * and we recover stacktraces there, but this is not the case for a `suspend fun main()` that knows nothing about
+         * kotlinx.coroutines and DispatchedTask
+         */
+        val recovered = if (delegate is DispatchedTask<*>) exception else recoverStackTrace(exception, delegate)
+        delegate.resumeWithExceptionMode(recovered, useMode)
+    } else {
+        delegate.resumeMode(getSuccessfulResult(state), useMode)
+    }
+}
+
+private fun DispatchedTask<*>.resumeUnconfined() {
+    val eventLoop = ThreadLocalEventLoop.eventLoop
+    if (eventLoop.isUnconfinedLoopActive) {
+        // When unconfined loop is active -- dispatch continuation for execution to avoid stack overflow
+        eventLoop.dispatchUnconfined(this)
+    } else {
+        // Was not active -- run event loop until all unconfined tasks are executed
+        runUnconfinedEventLoop(eventLoop) {
+            resume(delegate, MODE_UNDISPATCHED)
+        }
+    }
+}
+
+internal inline fun DispatchedTask<*>.runUnconfinedEventLoop(
+        eventLoop: EventLoop,
+        block: () -> Unit
+) {
+    eventLoop.incrementUseCount(unconfined = true)
+    try {
+        block()
+        while (true) {
+            // break when all unconfined continuations where executed
+            if (!eventLoop.processUnconfinedEvent()) break
+        }
+    } catch (e: Throwable) {
+        /*
+         * This exception doesn't happen normally, only if we have a bug in implementation.
+         * Report it as a fatal exception.
+         */
+        handleFatalException(e, null)
+    } finally {
+        eventLoop.decrementUseCount(unconfined = true)
+    }
+}
+
+internal fun <T> Continuation<T>.resumeCancellable(value: T) = when (this) {
+    is DispatchedContinuation -> resumeCancellable(value)
+    else -> resume(value)
+}
+
+internal fun <T> Continuation<T>.resumeCancellableWithException(exception: Throwable) = when (this) {
+    is DispatchedContinuation -> resumeCancellableWithException(exception)
+    else -> resumeWithStackTrace(exception)
+}
+
+internal fun <T> Continuation<T>.resumeDirect(value: T) = when (this) {
+    is DispatchedContinuation -> continuation.resume(value)
+    else -> resume(value)
+}
+
+internal fun <T> Continuation<T>.resumeDirectWithException(exception: Throwable) = when (this) {
+    is DispatchedContinuation -> continuation.resumeWithStackTrace(exception)
+    else -> resumeWithStackTrace(exception)
+}
+
 @Suppress("NOTHING_TO_INLINE")
 internal inline fun Continuation<*>.resumeWithStackTrace(exception: Throwable) {
     resumeWith(Result.failure(recoverStackTrace(exception, this)))
