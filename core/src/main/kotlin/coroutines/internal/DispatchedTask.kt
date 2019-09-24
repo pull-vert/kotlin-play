@@ -1,14 +1,22 @@
 package coroutines.internal
 
+import coroutines.*
 import coroutines.CompletedExceptionally
-import coroutines.Job
+import coroutines.CoroutinesInternalError
+import coroutines.isCancellableMode
 import coroutines.scheduling.SchedulerTask
+import coroutines.withCoroutineContext
 import kotlin.coroutines.Continuation
+import kotlin.coroutines.resume
 
 internal abstract class DispatchedTask<in T>(
         @JvmField public var resumeMode: Int
 ) : SchedulerTask() {
     internal abstract val delegate: Continuation<T>
+
+    internal abstract fun takeState(): Any?
+
+    internal open fun cancelResult(state: Any?, cause: Throwable) {}
 
     @Suppress("UNCHECKED_CAST")
     internal open fun <T> getSuccessfulResult(state: Any?): T =
@@ -72,7 +80,7 @@ internal abstract class DispatchedTask<in T>(
     internal fun handleFatalException(exception: Throwable?, finallyException: Throwable?) {
         if (exception === null && finallyException === null) return
         if (exception !== null && finallyException !== null) {
-            exception.addSuppressedThrowable(finallyException)
+            exception.addSuppressed(finallyException)
         }
 
         val cause = exception ?: finallyException
@@ -80,4 +88,9 @@ internal abstract class DispatchedTask<in T>(
                 "Please read KDoc to 'handleFatalException' method and report this incident to maintainers", cause!!)
         handleCoroutineException(this.delegate.context, reason)
     }
+}
+
+@Suppress("NOTHING_TO_INLINE")
+internal inline fun Continuation<*>.resumeWithStackTrace(exception: Throwable) {
+    resumeWith(Result.failure(recoverStackTrace(exception, this)))
 }

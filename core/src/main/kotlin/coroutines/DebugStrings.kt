@@ -1,5 +1,6 @@
 package coroutines
 
+import coroutines.internal.DispatchedContinuation
 import kotlin.coroutines.Continuation
 
 // internal debugging tools for string representation

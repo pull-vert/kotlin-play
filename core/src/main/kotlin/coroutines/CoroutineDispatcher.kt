@@ -1,5 +1,6 @@
 package coroutines
 
+import coroutines.internal.DispatchedContinuation
 import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.ContinuationInterceptor

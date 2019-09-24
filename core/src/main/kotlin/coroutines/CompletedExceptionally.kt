@@ -1,5 +1,7 @@
 package coroutines
 
+import kotlinx.atomicfu.atomic
+
 /**
  * Class for an internal state of a job that was cancelled (completed exceptionally).
  *
