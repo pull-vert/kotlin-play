@@ -126,6 +126,26 @@ private fun StackTraceElement.elementWiseEquals(e: StackTraceElement): Boolean {
 
 internal typealias CoroutineStackFrame = kotlin.coroutines.jvm.internal.CoroutineStackFrame
 
+/**
+ * The opposite of [recoverStackTrace].
+ * It is guaranteed that `unwrap(recoverStackTrace(e)) === e`
+ */
+internal fun <E : Throwable> unwrap(exception: E): E {
+    if (!RECOVER_STACK_TRACES) return exception
+    val cause = exception.cause
+    // Fast-path to avoid array cloning
+    if (cause == null || cause.javaClass != exception.javaClass) {
+        return exception
+    }
+    // Slow path looks for artificial frames in a stack-trace
+    if (exception.stackTrace.any { it.isArtificial() }) {
+        @Suppress("UNCHECKED_CAST")
+        return cause as E
+    } else {
+        return exception
+    }
+}
+
 private fun createStackTrace(continuation: CoroutineStackFrame): ArrayDeque<StackTraceElement> {
     val stack = ArrayDeque<StackTraceElement>()
     continuation.getStackTraceElement()?.let { stack.add(it) }

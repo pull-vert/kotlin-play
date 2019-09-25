@@ -36,3 +36,5 @@ internal inline val CancelHandlerBase.asHandler: CompletionHandler get() = this
 
 @Suppress("NOTHING_TO_INLINE")
 internal inline fun CompletionHandler.invokeIt(cause: Throwable?) = invoke(cause)
+
+internal inline fun <reified T> CompletionHandler.isHandlerOf(): Boolean = this is T

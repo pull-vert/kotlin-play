@@ -98,6 +98,58 @@ internal class DispatchedContinuation<in T>(
         }
     }
 
+    /**
+     * Checks whether there were any attempts to cancel reusable CC while it was in [REUSABLE_CLAIMED] state
+     * and returns cancellation cause if so, `null` otherwise.
+     * If continuation was cancelled, it becomes non-reusable.
+     *
+     * ```
+     * suspendAtomicCancellableCoroutineReusable { // <- claimed
+     * // Any asynchronous cancellation is "postponed" while this block
+     * // is being executed
+     * } // postponed cancellation is checked here in `getResult`
+     * ```
+     *
+     * See [CancellableContinuationImpl.getResult].
+     */
+    fun checkPostponedCancellation(continuation: CancellableContinuation<*>): Throwable? {
+        _reusableCancellableContinuation.loop { state ->
+            // not when(state) to avoid Intrinsics.equals call
+            when {
+                state === REUSABLE_CLAIMED -> {
+                    if (_reusableCancellableContinuation.compareAndSet(REUSABLE_CLAIMED, continuation)) return null
+                }
+                state === null -> return null
+                state is Throwable -> {
+                    require(_reusableCancellableContinuation.compareAndSet(state, null))
+                    return state
+                }
+                else -> error("Inconsistent state $state")
+            }
+        }
+    }
+
+    /**
+     * Tries to postpone cancellation if reusable CC is currently in [REUSABLE_CLAIMED] state.
+     * Returns `true` if cancellation is (or previously was) postponed, `false` otherwise.
+     */
+    fun postponeCancellation(cause: Throwable): Boolean {
+        _reusableCancellableContinuation.loop { state ->
+            when (state) {
+                REUSABLE_CLAIMED -> {
+                    if (_reusableCancellableContinuation.compareAndSet(REUSABLE_CLAIMED, cause))
+                        return true
+                }
+                is Throwable -> return true
+                else -> {
+                    // Invalidate
+                    if (_reusableCancellableContinuation.compareAndSet(state, null))
+                        return false
+                }
+            }
+        }
+    }
+
     override fun takeState(): Any? {
         val state = _state
         assert { state !== UNDEFINED } // fail-fast if repeatedly invoked

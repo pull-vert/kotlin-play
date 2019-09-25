@@ -4,6 +4,9 @@ import kotlinx.atomicfu.atomic
 import java.util.concurrent.CancellationException
 import kotlin.coroutines.Continuation
 
+internal fun <T> Result<T>.toState(): Any? =
+        if (isSuccess) getOrThrow() else CompletedExceptionally(exceptionOrNull()!!) // todo: need to do it better
+
 /**
  * Class for an internal state of a job that was cancelled (completed exceptionally).
  *

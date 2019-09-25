@@ -135,6 +135,14 @@ internal object ThreadLocalEventLoop {
     }
 }
 
+//@SharedImmutable
+private val DISPOSED_TASK = Symbol("REMOVED_TASK")
+
+// results for scheduleImpl
+private const val SCHEDULE_OK = 0
+private const val SCHEDULE_COMPLETED = 1
+private const val SCHEDULE_DISPOSED = 2
+
 private const val MS_TO_NS = 1_000_000L
 private const val MAX_MS = Long.MAX_VALUE / MS_TO_NS
 

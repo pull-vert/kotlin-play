@@ -1,3 +1,6 @@
+@file:JvmName("JobKt")
+@file:Suppress("DEPRECATION_ERROR", "RedundantUnitReturnType")
+
 package coroutines
 
 import java.util.concurrent.CancellationException
@@ -124,22 +127,84 @@ public interface DisposableHandle {
  * @suppress **This an internal API and should not be used from general code.**
  */
 //@InternalCoroutinesApi
-public object NonDisposableHandle : DisposableHandle/*, ChildHandle*/ {
+public object NonDisposableHandle : DisposableHandle, ChildHandle {
     /**
      * Does not do anything.
      * @suppress
      */
     override fun dispose() {}
 
-//    /**
-//     * Returns `false`.
-//     * @suppress
-//     */
-//    override fun childCancelled(cause: Throwable): Boolean = false
+    /**
+     * Returns `false`.
+     * @suppress
+     */
+    override fun childCancelled(cause: Throwable): Boolean = false
 
     /**
      * Returns "NonDisposableHandle" string.
      * @suppress
      */
     override fun toString(): String = "NonDisposableHandle"
+}
+
+// -------------------- Parent-child communication --------------------
+
+/**
+ * A reference that parent receives from its child so that it can report its cancellation.
+ *
+ * @suppress **This is unstable API and it is subject to change.**
+ */
+//@InternalCoroutinesApi
+@Deprecated(level = DeprecationLevel.ERROR, message = "This is internal API and may be removed in the future releases")
+public interface ChildJob : Job {
+    /**
+     * Parent is cancelling its child by invoking this method.
+     * Child finds the cancellation cause using [ParentJob.getChildJobCancellationCause].
+     * This method does nothing is the child is already being cancelled.
+     *
+     * @suppress **This is unstable API and it is subject to change.**
+     */
+//    @InternalCoroutinesApi
+    public fun parentCancelled(parentJob: ParentJob)
+}
+
+/**
+ * A reference that child receives from its parent when it is being cancelled by the parent.
+ *
+ * @suppress **This is unstable API and it is subject to change.**
+ */
+//@InternalCoroutinesApi
+@Deprecated(level = DeprecationLevel.ERROR, message = "This is internal API and may be removed in the future releases")
+public interface ParentJob : Job {
+    /**
+     * Child job is using this method to learn its cancellation cause when the parent cancels it with [ChildJob.parentCancelled].
+     * This method is invoked only if the child was not already being cancelled.
+     *
+     * Note that [CancellationException] is the method's return type: if child is cancelled by its parent,
+     * then the original exception is **already** handled by either the parent or the original source of failure.
+     *
+     * @suppress **This is unstable API and it is subject to change.**
+     */
+//    @InternalCoroutinesApi
+    public fun getChildJobCancellationCause(): CancellationException
+}
+
+/**
+ * A handle that child keep onto its parent so that it is able to report its cancellation.
+ *
+ * @suppress **This is unstable API and it is subject to change.**
+ */
+//@InternalCoroutinesApi
+@Deprecated(level = DeprecationLevel.ERROR, message = "This is internal API and may be removed in the future releases")
+public interface ChildHandle : DisposableHandle {
+    /**
+     * Child is cancelling its parent by invoking this method.
+     * This method is invoked by the child twice. The first time child report its root cause as soon as possible,
+     * so that all its siblings and the parent can start cancelling their work asap. The second time
+     * child invokes this method when it had aggregated and determined its final cancellation cause.
+     *
+     * @suppress **This is unstable API and it is subject to change.**
+     */
+//    @InternalCoroutinesApi
+    public fun childCancelled(cause: Throwable): Boolean
 }

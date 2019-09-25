@@ -4,7 +4,6 @@
 
 package coroutines
 
-import kotlinx.coroutines.selects.*
 import kotlin.coroutines.*
 
 /**

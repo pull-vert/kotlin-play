@@ -1,10 +1,6 @@
 package coroutines
 
 import coroutines.internal.*
-import coroutines.internal.CoroutineStackFrame
-import coroutines.internal.DispatchedContinuation
-import coroutines.internal.DispatchedTask
-import coroutines.internal.recoverStackTrace
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.loop
 import kotlin.coroutines.Continuation
@@ -128,7 +124,71 @@ internal open class CancellableContinuationImpl<in T>(
         return true
     }
 
+    public override val callerFrame: CoroutineStackFrame?
+        get() = delegate as? CoroutineStackFrame
+
+    public override fun getStackTraceElement(): StackTraceElement? = null
+
     override fun takeState(): Any? = state
+
+    /*
+     * Attempt to postpone cancellation for reusable cancellable continuation
+     */
+    private fun cancelLater(cause: Throwable): Boolean {
+        if (resumeMode != MODE_ATOMIC_DEFAULT) return false
+        val dispatched = (delegate as? DispatchedContinuation<*>) ?: return false
+        return dispatched.postponeCancellation(cause)
+    }
+
+    public override fun cancel(cause: Throwable?): Boolean {
+        _state.loop { state ->
+            if (state !is NotCompleted) return false // false if already complete or cancelling
+            // Active -- update to final state
+            val update = CancelledContinuation(this, cause, handled = state is CancelHandler)
+            if (!_state.compareAndSet(state, update)) return@loop // retry on cas failure
+            // Invoke cancel handler if it was present
+            if (state is CancelHandler) invokeHandlerSafely { state.invoke(cause) }
+            // Complete state update
+            detachChildIfNonResuable()
+            dispatchResume(mode = MODE_ATOMIC_DEFAULT)
+            return true
+        }
+    }
+
+    internal fun parentCancelled(cause: Throwable) {
+        if (cancelLater(cause)) return
+        cancel(cause)
+        // Even if cancellation has failed, we should detach child to avoid potential leak
+        detachChildIfNonResuable()
+    }
+
+    private inline fun invokeHandlerSafely(block: () -> Unit) {
+        try {
+            block()
+        } catch (ex: Throwable) {
+            // Handler should never fail, if it does -- it is an unhandled exception
+            handleCoroutineException(
+                    context,
+                    CompletionHandlerException("Exception in cancellation handler for $this", ex)
+            )
+        }
+    }
+
+    /**
+     * It is used when parent is cancelled to get the cancellation cause for this continuation.
+     */
+    open fun getContinuationCancellationCause(parent: Job): Throwable =
+            parent.getCancellationException()
+
+    private fun trySuspend(): Boolean {
+        _decision.loop { decision ->
+            when (decision) {
+                UNDECIDED -> if (this._decision.compareAndSet(UNDECIDED, SUSPENDED)) return true
+                RESUMED -> return false
+                else -> error("Already suspended")
+            }
+        }
+    }
 
     private fun tryResume(): Boolean {
         _decision.loop { decision ->
@@ -162,6 +222,62 @@ internal open class CancellableContinuationImpl<in T>(
         return getSuccessfulResult(state)
     }
 
+    override fun resumeWith(result: Result<T>) {
+        resumeImpl(result.toState(), resumeMode)
+    }
+
+    override fun resume(value: T, onCancellation: (cause: Throwable) -> Unit) {
+        val cancelled = resumeImpl(CompletedWithCancellation(value, onCancellation), resumeMode)
+        if (cancelled != null) {
+            // too late to resume (was cancelled) -- call handler
+            invokeHandlerSafely {
+                onCancellation(cancelled.cause)
+            }
+        }
+    }
+
+    public override fun invokeOnCancellation(handler: CompletionHandler) {
+        var handleCache: CancelHandler? = null
+        _state.loop { state ->
+            when (state) {
+                is Active -> {
+                    val node = handleCache ?: makeHandler(handler).also { handleCache = it }
+                    if (_state.compareAndSet(state, node)) return // quit on cas success
+                }
+                is CancelHandler -> multipleHandlersError(handler, state)
+                is CancelledContinuation -> {
+                    /*
+                     * Continuation was already cancelled, invoke directly.
+                     * NOTE: multiple invokeOnCancellation calls with different handlers are not allowed,
+                     * so we check to make sure that handler was installed just once.
+                     */
+                    if (!state.makeHandled()) multipleHandlersError(handler, state)
+                    /*
+                     * :KLUDGE: We have to invoke a handler in platform-specific way via `invokeIt` extension,
+                     * because we play type tricks on Kotlin/JS and handler is not necessarily a function there
+                     */
+                    invokeHandlerSafely { handler.invokeIt((state as? CompletedExceptionally)?.cause) }
+                    return
+                }
+                else -> {
+                    /*
+                     * Continuation was already completed, do nothing.
+                     * NOTE: multiple invokeOnCancellation calls with different handlers are not allowed,
+                     * but we have no way to check that it was installed just once in this case.
+                     */
+                    return
+                }
+            }
+        }
+    }
+
+    private fun multipleHandlersError(handler: CompletionHandler, state: Any?) {
+        error("It's prohibited to register multiple handlers, tried to register $handler, already has $state")
+    }
+
+    private fun makeHandler(handler: CompletionHandler): CancelHandler =
+            if (handler is CancelHandler) handler else InvokeOnCancel(handler)
+
     private fun dispatchResume(mode: Int) {
         if (tryResume()) return // completed before getResult invocation -- bail out
         // otherwise, getResult has already commenced, i.e. completed later or in other thread
@@ -189,6 +305,10 @@ internal open class CancellableContinuationImpl<in T>(
             }
             alreadyResumedError(proposedUpdate) // otherwise -- an error (second resume attempt)
         }
+    }
+
+    private fun alreadyResumedError(proposedUpdate: Any?) {
+        error("Already resumed, but proposed with update $proposedUpdate")
     }
 
     /**
@@ -277,10 +397,27 @@ private object Active : NotCompleted {
 
 internal abstract class CancelHandler : CancelHandlerBase(), NotCompleted
 
+// Wrapper for lambdas, for the performance sake CancelHandler can be subclassed directly
+private class InvokeOnCancel( // Clashes with InvokeOnCancellation
+        private val handler: CompletionHandler
+) : CancelHandler() {
+    override fun invoke(cause: Throwable?) {
+        handler.invoke(cause)
+    }
+    override fun toString() = "InvokeOnCancel[${handler.classSimpleName}@$hexAddress]"
+}
+
 private class CompletedIdempotentResult(
         @JvmField val idempotentResume: Any?,
         @JvmField val result: Any?,
         @JvmField val token: NotCompleted
 ) {
     override fun toString(): String = "CompletedIdempotentResult[$result]"
+}
+
+private class CompletedWithCancellation(
+        @JvmField val result: Any?,
+        @JvmField val onCancellation: (cause: Throwable) -> Unit
+) {
+    override fun toString(): String = "CompletedWithCancellation[$result]"
 }
