@@ -125,6 +125,29 @@ public open class JobSupport constructor(active: Boolean) : Job, ChildJob, Paren
     @JvmField
     internal var parentHandle: ChildHandle? = null
 
+    // ------------ initialization ------------
+
+    /**
+     * Initializes parent job.
+     * It shall be invoked at most once after construction after all other initialization.
+     */
+    internal fun initParentJobInternal(parent: Job?) {
+        assert { parentHandle == null }
+        if (parent == null) {
+            parentHandle = NonDisposableHandle
+            return
+        }
+        parent.start() // make sure the parent is started
+        @Suppress("DEPRECATION")
+        val handle = parent.attachChild(this)
+        parentHandle = handle
+        // now check our state _after_ registering (see tryFinalizeSimpleState order of actions)
+        if (isCompleted) {
+            handle.dispose()
+            parentHandle = NonDisposableHandle // release it just in case, to aid GC
+        }
+    }
+
     // ------------ state query ------------
     /**
      * Returns current state of this job.
@@ -152,8 +175,8 @@ public open class JobSupport constructor(active: Boolean) : Job, ChildJob, Paren
         return state is Incomplete && state.isActive
     }
 
-//    public final override val isCompleted: Boolean get() = state !is Incomplete
-//
+    public final override val isCompleted: Boolean get() = state !is Incomplete
+
 //    public final override val isCancelled: Boolean get() {
 //        val state = this.state
 //        return state is CompletedExceptionally || (state is Finishing && state.isCancelling)
@@ -648,6 +671,43 @@ public open class JobSupport constructor(active: Boolean) : Job, ChildJob, Paren
         else -> error("State should have list: $state")
     }
 
+    /**
+     * This function is used by [CompletableDeferred.complete] (and exceptionally) and by [JobImpl.cancel].
+     * It returns `false` on repeated invocation (when this job is already completing).
+     *
+     * @suppress **This is unstable API and it is subject to change.**
+     */
+    internal fun makeCompleting(proposedUpdate: Any?): Boolean = loopOnState { state ->
+        when (tryMakeCompleting(state, proposedUpdate, mode = MODE_ATOMIC_DEFAULT)) {
+            COMPLETING_ALREADY_COMPLETING -> return false
+            COMPLETING_COMPLETED, COMPLETING_WAITING_CHILDREN -> return true
+            COMPLETING_RETRY -> return@loopOnState
+            else -> error("unexpected result")
+        }
+    }
+
+    /**
+     * This function is used by [AbstractCoroutine.resume].
+     * It throws exception on repeated invocation (when this job is already completing).
+     *
+     * Returns:
+     * * `true` if state was updated to completed/cancelled;
+     * * `false` if made completing or it is cancelling and is waiting for children.
+     *
+     * @throws IllegalStateException if job is already complete or completing
+     * @suppress **This is unstable API and it is subject to change.**
+     */
+    internal fun makeCompletingOnce(proposedUpdate: Any?, mode: Int): Boolean = loopOnState { state ->
+        when (tryMakeCompleting(state, proposedUpdate, mode)) {
+            COMPLETING_ALREADY_COMPLETING -> throw IllegalStateException("Job $this is already complete or completing, " +
+                    "but is being completed with $proposedUpdate", proposedUpdate.exceptionOrNull)
+            COMPLETING_COMPLETED -> return true
+            COMPLETING_WAITING_CHILDREN -> return false
+            COMPLETING_RETRY -> return@loopOnState
+            else -> error("unexpected result")
+        }
+    }
+
     private fun tryMakeCompleting(state: Any?, proposedUpdate: Any?, mode: Int): Int {
         if (state !is Incomplete)
             return COMPLETING_ALREADY_COMPLETING
@@ -706,6 +766,9 @@ public open class JobSupport constructor(active: Boolean) : Job, ChildJob, Paren
         return COMPLETING_RETRY
     }
 
+    private val Any?.exceptionOrNull: Throwable?
+        get() = (this as? CompletedExceptionally)?.cause
+
     private fun firstChild(state: Incomplete) =
             state as? ChildHandleNode ?: state.list?.nextChild()
 
@@ -741,6 +804,20 @@ public open class JobSupport constructor(active: Boolean) : Job, ChildJob, Paren
             if (cur is ChildHandleNode) return cur
             if (cur is NodeList) return null // checked all -- no more children
         }
+    }
+
+    @Suppress("OverridingDeprecatedMember")
+    public final override fun attachChild(child: ChildJob): ChildHandle {
+        /*
+         * Note: This function attaches a special ChildHandleNode node object. This node object
+         * is handled in a special way on completion on the coroutine (we wait for all of them) and
+         * is handled specially by invokeOnCompletion itself -- it adds this node to the list even
+         * if the job is already cancelling. For cancelling state child is attached under state lock.
+         * It's required to properly wait all children before completion and provide linearizable hierarchy view:
+         * If child is attached when the job is already being cancelled, such child will receive immediate notification on
+         * cancellation, but parent *will* wait for that child before completion and will handle its exception.
+         */
+        return invokeOnCompletion(onCancelling = true, handler = ChildHandleNode(this, child).asHandler) as ChildHandle
     }
 
     /**
@@ -948,6 +1025,33 @@ private val EMPTY_ACTIVE = Empty(true)
 private class Empty(override val isActive: Boolean) : Incomplete {
     override val list: NodeList? get() = null
     override fun toString(): String = "Empty{${if (isActive) "Active" else "New" }}"
+}
+
+internal open class JobImpl(parent: Job?) : JobSupport(true), CompletableJob {
+    init { initParentJobInternal(parent) }
+    override val onCancelComplete get() = true
+    /*
+     * Check whether parent is able to handle exceptions as well.
+     * With this check, an exception in that pattern will be handled once:
+     * ```
+     * launch {
+     *     val child = Job(coroutineContext[Job])
+     *     launch(child) { throw ... }
+     * }
+     * ```
+     */
+    override val handlesException: Boolean = handlesException()
+    override fun complete() = makeCompleting(Unit)
+    override fun completeExceptionally(exception: Throwable): Boolean =
+            makeCompleting(CompletedExceptionally(exception))
+
+    private fun handlesException(): Boolean {
+        var parentJob = (parentHandle as? ChildHandleNode)?.job ?: return false
+        while (true) {
+            if (parentJob.handlesException) return true
+            parentJob = (parentJob.parentHandle as? ChildHandleNode)?.job ?: return false
+        }
+    }
 }
 
 // -------- invokeOnCompletion nodes

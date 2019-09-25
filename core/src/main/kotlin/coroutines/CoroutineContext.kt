@@ -17,6 +17,13 @@ internal inline fun <T> withCoroutineContext(context: CoroutineContext, countOrE
     }
 }
 
+internal val CoroutineContext.coroutineName: String? get() {
+    if (!DEBUG) return null
+    val coroutineId = this[CoroutineId] ?: return null
+    val coroutineName = this[CoroutineName]?.name ?: "coroutine"
+    return "$coroutineName#${coroutineId.id}"
+}
+
 private const val DEBUG_THREAD_NAME_SEPARATOR = " @"
 
 internal data class CoroutineId(

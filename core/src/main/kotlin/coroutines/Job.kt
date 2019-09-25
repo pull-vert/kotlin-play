@@ -31,12 +31,44 @@ interface Job : CoroutineContext.Element {
     public val isActive: Boolean
 
     /**
+     * Returns `true` when this job has completed for any reason. A job that was cancelled or failed
+     * and has finished its execution is also considered complete. Job becomes complete only after
+     * all its [children] complete.
+     *
+     * See [Job] documentation for more details on job states.
+     */
+    public val isCompleted: Boolean
+
+    /**
      * Cancels this job with an optional cancellation [cause].
      * A cause can be used to specify an error message or to provide other details on
      * the cancellation reason for debugging purposes.
      * See [Job] documentation for full explanation of cancellation machinery.
      */
     public fun cancel(cause: CancellationException? = null)
+
+    /**
+     * Attaches child job so that this job becomes its parent and
+     * returns a handle that should be used to detach it.
+     *
+     * A parent-child relation has the following effect:
+     * * Cancellation of parent with [cancel] or its exceptional completion (failure)
+     *   immediately cancels all its children.
+     * * Parent cannot complete until all its children are complete. Parent waits for all its children to
+     *   complete in _completing_ or _cancelling_ states.
+     *
+     * **A child must store the resulting [ChildHandle] and [dispose][DisposableHandle.dispose] the attachment
+     * to its parent on its own completion.**
+     *
+     * Coroutine builders and job factory functions that accept `parent` [CoroutineContext] parameter
+     * lookup a [Job] instance in the parent context and use this function to attach themselves as a child.
+     * They also store a reference to the resulting [ChildHandle] and dispose a handle when they complete.
+     *
+     * @suppress This is an internal API. This method is too error prone for public API.
+     */
+    // ChildJob and ChildHandle are made internal on purpose to further deter 3rd-party impl of Job
+//    @InternalCoroutinesApi
+    public fun attachChild(child: ChildJob): ChildHandle
 
     /**
      * Returns [CancellationException] that signals the completion of this job. This function is
@@ -112,6 +144,26 @@ interface Job : CoroutineContext.Element {
 }
 
 /**
+ * Creates a job object in an active state.
+ * A failure of any child of this job immediately causes this job to fail, too, and cancels the rest of its children.
+ *
+ * To handle children failure independently of each other use [SupervisorJob].
+ *
+ * If [parent] job is specified, then this job becomes a child job of its parent and
+ * is cancelled when its parent fails or is cancelled. All this job's children are cancelled in this case, too.
+ * The invocation of [cancel][Job.cancel] with exception (other than [CancellationException]) on this job also cancels parent.
+ *
+ * Conceptually, the resulting job works in the same way as the job created by the `launch { body }` invocation
+ * (see [launch]), but without any code in the body. It is active until cancelled or completed. Invocation of
+ * [CompletableJob.complete] or [CompletableJob.completeExceptionally] corresponds to the successful or
+ * failed completion of the body of the coroutine.
+ *
+ * @param parent an optional parent job.
+ */
+@Suppress("FunctionName")
+public fun Job(parent: Job? = null): CompletableJob = JobImpl(parent)
+
+/**
  * A handle to an allocated object that can be disposed to make it eligible for garbage collection.
  */
 public interface DisposableHandle {
@@ -145,6 +197,25 @@ public object NonDisposableHandle : DisposableHandle, ChildHandle {
      * @suppress
      */
     override fun toString(): String = "NonDisposableHandle"
+}
+
+/**
+ * Ensures that job in the current context is [active][Job.isActive].
+ * Throws [IllegalStateException] if the context does not have a job in it.
+ *
+ * If the job is no longer active, throws [CancellationException].
+ * If the job was cancelled, thrown exception contains the original cancellation cause.
+ *
+ * This method is a drop-in replacement for the following code, but with more precise exception:
+ * ```
+ * if (!isActive) {
+ *     throw CancellationException()
+ * }
+ * ```
+ */
+public fun CoroutineContext.ensureActive(): Unit {
+    val job = get(Job) ?: error("Context cannot be checked for liveness because it does not have a job: $this")
+    job.ensureActive()
 }
 
 // -------------------- Parent-child communication --------------------
