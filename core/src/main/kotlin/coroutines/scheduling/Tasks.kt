@@ -10,7 +10,7 @@ internal enum class TaskMode {
     /**
      * Marker indicating that task may potentially block, thus giving scheduler a hint that additional thread may be required
      */
-    PROBABLY_BLOCKING,
+    PROBABLY_BLOCKING
 }
 
 internal interface SchedulerTaskContext {

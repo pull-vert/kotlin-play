@@ -1,3 +1,4 @@
 rootProject.name = 'kotlin-play'
 
 include 'core'
+include 'core-reactive'
