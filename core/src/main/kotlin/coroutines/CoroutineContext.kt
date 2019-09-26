@@ -3,7 +3,24 @@ package coroutines
 import coroutines.internal.restoreThreadContext
 import coroutines.internal.updateThreadContext
 import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.ContinuationInterceptor
 import kotlin.coroutines.CoroutineContext
+
+/**
+ * Creates context for the new coroutine. It installs [Dispatchers.Default] when no other dispatcher nor
+ * [ContinuationInterceptor] is specified, and adds optional support for debugging facilities (when turned on).
+ *
+ * See [DEBUG_PROPERTY_NAME] for description of debugging facilities on JVM.
+ */
+//@ExperimentalCoroutinesApi
+public fun CoroutineScope.newCoroutineContext(context: CoroutineContext): CoroutineContext {
+    val combined = coroutineContext + context
+    val debug = if (DEBUG) combined + CoroutineId(COROUTINE_ID.incrementAndGet()) else combined
+    return if (combined !== Dispatchers.Default && combined[ContinuationInterceptor] == null)
+        debug + Dispatchers.Default else debug
+}
+
+internal fun createDefaultDispatcher(): CoroutineDispatcher = CommonPool
 
 /**
  * Executes a block using a given coroutine context.

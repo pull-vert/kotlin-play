@@ -1,6 +1,7 @@
 package coroutines
 
 import coroutines.internal.systemProp
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Name of the property that controls coroutine debugging.
@@ -103,3 +104,6 @@ internal val RECOVER_STACK_TRACES =
 internal inline fun assert(value: () -> Boolean) {
     if (ASSERTIONS_ENABLED && !value()) throw AssertionError()
 }
+
+// It is used only in debug mode
+internal val COROUTINE_ID = AtomicLong(0)
