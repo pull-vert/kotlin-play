@@ -13,11 +13,11 @@ import java.util.concurrent.*
 
 // ./gradlew --no-daemon cleanJmhJar jmh -Pjmh="SimpleChannelBenchmark"
 //Benchmark                                     Mode  Cnt     Score     Error  Units
-//SimpleChannelBenchmark.NonCancellable         avgt    5   374,729 ▒   7,718  us/op
-//SimpleChannelBenchmark.cancellable            avgt    5  3445,842 ▒ 266,652  us/op
-//SimpleChannelBenchmark.cancellableReusable    avgt    5  1895,527 ▒  62,275  us/op
-//SimpleChannelBenchmark.kotlinxCancellable     avgt    5  3345,329 ▒ 234,224  us/op
-//SimpleChannelBenchmark.kotlinxNonCancellable  avgt    5  1232,176 ▒  45,612  us/op
+//SimpleChannelBenchmark.NonCancellable         avgt    5  1220,195 ▒  68,454  us/op
+//SimpleChannelBenchmark.cancellable            avgt    5  3725,369 ▒ 362,167  us/op
+//SimpleChannelBenchmark.cancellableReusable    avgt    5  2027,912 ▒ 217,073  us/op
+//SimpleChannelBenchmark.kotlinxCancellable     avgt    5  3749,392 ▒ 438,129  us/op
+//SimpleChannelBenchmark.kotlinxNonCancellable  avgt    5  1338,719 ▒ 338,091  us/op
 
 @Warmup(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
 @Measurement(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
@@ -59,41 +59,41 @@ open class SimpleChannelBenchmark {
         }
     }
 
-//    @Benchmark
-//    fun cancellable() = runBlocking {
-//        val ch = CancellableChannel()
-//        launch {
-//            repeat(iterations) { ch.send(it) }
-//        }
-//
-//        launch {
-//            repeat(iterations) { sink = ch.receive() }
-//        }
-//    }
-//
-//    @Benchmark
-//    fun cancellableReusable() = runBlocking {
-//        val ch = CancellableReusableChannel()
-//        launch {
-//            repeat(iterations) { ch.send(it) }
-//        }
-//
-//        launch {
-//            repeat(iterations) { sink = ch.receive() }
-//        }
-//    }
-//
-//    @Benchmark
-//    fun NonCancellable() = runBlocking {
-//        val ch = NonCancellableChannel()
-//        launch {
-//            repeat(iterations) { ch.send(it) }
-//        }
-//
-//        launch {
-//            repeat(iterations) {
-//                sink = ch.receive()
-//            }
-//        }
-//    }
+    @Benchmark
+    fun cancellable() = runBlocking {
+        val ch = CancellableChannel()
+        launch {
+            repeat(iterations) { ch.send(it) }
+        }
+
+        launch {
+            repeat(iterations) { sink = ch.receive() }
+        }
+    }
+
+    @Benchmark
+    fun cancellableReusable() = runBlocking {
+        val ch = CancellableReusableChannel()
+        launch {
+            repeat(iterations) { ch.send(it) }
+        }
+
+        launch {
+            repeat(iterations) { sink = ch.receive() }
+        }
+    }
+
+    @Benchmark
+    fun NonCancellable() = runBlocking {
+        val ch = NonCancellableChannel()
+        launch {
+            repeat(iterations) { ch.send(it) }
+        }
+
+        launch {
+            repeat(iterations) {
+                sink = ch.receive()
+            }
+        }
+    }
 }

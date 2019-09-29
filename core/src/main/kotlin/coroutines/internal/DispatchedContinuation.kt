@@ -1,15 +1,13 @@
+/*
+ * Copyright 2016-2019 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license.
+ */
+
 package coroutines.internal
 
 import coroutines.*
-import coroutines.CancellableContinuationImpl
-import coroutines.MODE_ATOMIC_DEFAULT
-import coroutines.MODE_CANCELLABLE
-import coroutines.assert
-import kotlinx.atomicfu.atomic
-import kotlinx.atomicfu.loop
-import kotlin.coroutines.Continuation
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+import kotlinx.atomicfu.*
+import kotlin.coroutines.*
+import kotlin.jvm.*
 
 //@SharedImmutable
 private val UNDEFINED = Symbol("UNDEFINED")
@@ -159,6 +157,22 @@ internal class DispatchedContinuation<in T>(
 
     override val delegate: Continuation<T>
         get() = this
+
+    override fun resumeWith(result: Result<T>) {
+        val context = continuation.context
+        val state = result.toState()
+        if (dispatcher.isDispatchNeeded(context)) {
+            _state = state
+            resumeMode = MODE_ATOMIC_DEFAULT
+            dispatcher.dispatch(context, this)
+        } else {
+            executeUnconfined(state, MODE_ATOMIC_DEFAULT) {
+                withCoroutineContext(this.context, countOrElement) {
+                    continuation.resumeWith(result)
+                }
+            }
+        }
+    }
 
     @Suppress("NOTHING_TO_INLINE") // we need it inline to save us an entry on the stack
     inline fun resumeCancellable(value: T) {

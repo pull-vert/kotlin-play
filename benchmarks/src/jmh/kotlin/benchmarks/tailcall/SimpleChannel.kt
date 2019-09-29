@@ -57,7 +57,6 @@ public abstract class SimpleChannel {
     abstract suspend fun suspendSend(element: Int)
 }
 
-@InternalCoroutinesApi
 class CancellableChannel : SimpleChannel() {
     override suspend fun suspendReceive(): Int = suspendAtomicCancellableCoroutine {
         consumer = it.intercepted()

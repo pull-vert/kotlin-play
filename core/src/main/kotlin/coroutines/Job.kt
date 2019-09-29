@@ -70,6 +70,31 @@ interface Job : CoroutineContext.Element {
 //    @InternalCoroutinesApi
     public fun attachChild(child: ChildJob): ChildHandle
 
+    // ------------ state waiting ------------
+
+    /**
+     * Suspends the coroutine until this job is complete. This invocation resumes normally (without exception)
+     * when the job is complete for any reason and the [Job] of the invoking coroutine is still [active][isActive].
+     * This function also [starts][Job.start] the corresponding coroutine if the [Job] was still in _new_ state.
+     *
+     * Note that the job becomes complete only when all its children are complete.
+     *
+     * This suspending function is cancellable and **always** checks for a cancellation of the invoking coroutine's Job.
+     * If the [Job] of the invoking coroutine is cancelled or completed when this
+     * suspending function is invoked or while it is suspended, this function
+     * throws [CancellationException].
+     *
+     * In particular, it means that a parent coroutine invoking `join` on a child coroutine that was started using
+     * `launch(coroutineContext) { ... }` builder throws [CancellationException] if the child
+     * had crashed, unless a non-standard [CoroutineExceptionHandler] is installed in the context.
+     *
+     * This function can be used in [select] invocation with [onJoin] clause.
+     * Use [isCompleted] to check for a completion of this job without waiting.
+     *
+     * There is [cancelAndJoin] function that combines an invocation of [cancel] and `join`.
+     */
+    public suspend fun join()
+
     /**
      * Returns [CancellationException] that signals the completion of this job. This function is
      * used by [cancellable][suspendCancellableCoroutine] suspending functions. They throw exception

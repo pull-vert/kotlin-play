@@ -26,6 +26,22 @@ internal class DispatchedContinuation<T>(
     override val delegate: Continuation<T>
         get() = this
 
+    override fun resumeWith(result: Result<T>) {
+        val context = continuation.context
+        val state = result.toState()
+//        if (dispatcher.isDispatchNeeded(context)) {
+            _state = state
+//            resumeMode = MODE_ATOMIC_DEFAULT
+            dispatcher.dispatch(context, this)
+//        } else {
+//            executeUnconfined(state, MODE_ATOMIC_DEFAULT) {
+//                withCoroutineContext(this.context, countOrElement) {
+//                    continuation.resumeWith(result)
+//                }
+//            }
+//        }
+    }
+
     @Suppress("NOTHING_TO_INLINE") // we need it inline to save us an entry on the stack
     inline fun resumeCancellable(value: T) {
 //        if (dispatcher.isDispatchNeeded(context)) {

@@ -36,21 +36,20 @@ internal abstract class DispatchedTask<T> : CompletableTask, Runnable {
         val context = continuation.context
         val state = takeState() // NOTE: Must take state in any case, even if cancelled
         withCoroutineContext(context, delegate.countOrElement) {
-            try {
-                val value = state.getOrThrow()
-                val job = context[Job]
-                /* Check whether continuation was originally resumed with an exception.
-                * If so, it dominates cancellation, otherwise the original exception
-                * will be silently lost.
-                */
-                if (job != null && !job.isActive) {
-                    val cause = job.getCancellationException()
-                    cancelResult(state, cause)
-                    continuation.resumeWithStackTrace(cause)
-                }
-                continuation.resume(value)
-            } catch (exception: Throwable) {
-                continuation.resumeWithStackTrace(exception)
+            val exception = state.exceptionOrNull()
+            val job = context[Job]
+            /*
+             * Check whether continuation was originally resumed with an exception.
+             * If so, it dominates cancellation, otherwise the original exception
+             * will be silently lost.
+             */
+            if (exception == null && job != null && !job.isActive) {
+                val cause = job.getCancellationException()
+                cancelResult(state, cause)
+                continuation.resumeWithStackTrace(cause)
+            } else {
+                if (exception != null) continuation.resumeWithStackTrace(exception)
+                else continuation.resume(state.value as T)
             }
         }
     }

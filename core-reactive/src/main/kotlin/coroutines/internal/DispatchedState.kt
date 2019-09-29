@@ -97,16 +97,16 @@ internal inline class DispatchedState<out T> private constructor(
     }
 }
 
-/**
- * Throws exception if the result is failure. This internal function minimizes
- * inlined bytecode for [getOrThrow] and makes sure that in the future we can
- * add some exception-augmenting logic here (if needed).
- */
-@PublishedApi
-internal fun DispatchedState<*>.throwOnFailure() {
-    if (value is CompletedExceptionally) throw value.cause
-}
-
+///**
+// * Throws exception if the result is failure. This internal function minimizes
+// * inlined bytecode for [getOrThrow] and makes sure that in the future we can
+// * add some exception-augmenting logic here (if needed).
+// */
+//@PublishedApi
+//internal fun DispatchedState<*>.throwOnFailure() {
+//    if (value is CompletedExceptionally) throw value.cause
+//}
+//
 ///**
 // * Calls the specified function [block] and returns its encapsulated result if invocation was successful,
 // * catching and encapsulating any thrown exception as a failure.
@@ -133,16 +133,16 @@ internal fun DispatchedState<*>.throwOnFailure() {
 
 // -- extensions ---
 
-/**
- * Returns the encapsulated value if this instance represents [success][DispatchedState.isSuccess] or throws the encapsulated exception
- * if it is [failure][DispatchedState.isFailure].
- *
- * This function is shorthand for `getOrElse { throw it }` (see [getOrElse]).
- */
-internal inline fun <T> DispatchedState<T>.getOrThrow(): T {
-    throwOnFailure()
-    return value as T
-}
+///**
+// * Returns the encapsulated value if this instance represents [success][DispatchedState.isSuccess] or throws the encapsulated exception
+// * if it is [failure][DispatchedState.isFailure].
+// *
+// * This function is shorthand for `getOrElse { throw it }` (see [getOrElse]).
+// */
+//internal inline fun <T> DispatchedState<T>.getOrThrow(): T {
+//    throwOnFailure()
+//    return value as T
+//}
 
 // "peek" onto value/exception and pipe
 
@@ -173,4 +173,7 @@ internal inline fun <T> DispatchedState<T>.getOrThrow(): T {
 //}
 
 // -------------------
+
+internal fun <T> Result<T>.toState(): DispatchedState<T> =
+        if (isSuccess) DispatchedState.success(getOrThrow()) else DispatchedState.failure(exceptionOrNull()!!) // todo: need to do it better
 

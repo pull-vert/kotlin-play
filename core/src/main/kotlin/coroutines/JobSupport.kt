@@ -6,7 +6,10 @@ import coroutines.internal.*
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.loop
 import java.util.concurrent.CancellationException
+import kotlin.coroutines.Continuation
 import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.coroutineContext
+import kotlin.coroutines.resume
 
 /**
  * A concrete implementation of [Job]. It is optionally a child to a parent job.
@@ -490,6 +493,26 @@ public open class JobSupport constructor(active: Boolean) : Job, ChildJob, Paren
         val list = state.nextNode // either our NodeList or somebody else won the race, updated state
         // just attempt converting it to list if state is still the same, then we'll continue lock-free loop
         _state.compareAndSet(state, list)
+    }
+
+    public final override suspend fun join() {
+        if (!joinInternal()) { // fast-path no wait
+            coroutineContext.checkCompletion()
+            return // do not suspend
+        }
+        return joinSuspend() // slow-path wait
+    }
+
+    private fun joinInternal(): Boolean {
+        loopOnState { state ->
+            if (state !is Incomplete) return false // not active anymore (complete) -- no need to wait
+            if (startInternal(state) >= 0) return true // wait unless need to retry
+        }
+    }
+
+    private suspend fun joinSuspend() = suspendCancellableCoroutine<Unit> { cont ->
+        // We have to invoke join() handler only on cancellation, on completion we will be resumed regularly without handlers
+        cont.disposeOnCancellation(invokeOnCompletion(handler = ResumeOnCompletion(this, cont).asHandler))
     }
 
     /**
@@ -1108,6 +1131,14 @@ private class InvokeOnCompletion(
 ) : JobNode<Job>(job)  {
     override fun invoke(cause: Throwable?) = handler.invoke(cause)
     override fun toString() = "InvokeOnCompletion[$classSimpleName@$hexAddress]"
+}
+
+private class ResumeOnCompletion(
+        job: Job,
+        private val continuation: Continuation<Unit>
+) : JobNode<Job>(job)  {
+    override fun invoke(cause: Throwable?) = continuation.resume(Unit)
+    override fun toString() = "ResumeOnCompletion[$continuation]"
 }
 
 // -------- invokeOnCancellation nodes

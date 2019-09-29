@@ -6,6 +6,7 @@ package coroutines
 
 import coroutines.internal.systemProp
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import java.util.*
 import java.util.concurrent.CancellationException
@@ -208,3 +209,42 @@ public open class TestBase {
 
     protected suspend fun currentDispatcher() = coroutineContext[ContinuationInterceptor]!!
 }
+
+public suspend inline fun hang(onCancellation: () -> Unit) {
+    try {
+        suspendCancellableCoroutine<Unit> { }
+    } finally {
+        onCancellation()
+    }
+}
+
+public inline fun <reified T : Throwable> assertFailsWith(block: () -> Unit) {
+    try {
+        block()
+        error("Should not be reached")
+    } catch (e: Throwable) {
+        assertTrue(e is T)
+    }
+}
+
+
+// data is added to avoid stacktrace recovery because CopyableThrowable is not accessible from common modules
+public class TestException(message: String? = null, private val data: Any? = null) : Throwable(message)
+public class TestException1(message: String? = null, private val data: Any? = null) : Throwable(message)
+public class TestException2(message: String? = null, private val data: Any? = null) : Throwable(message)
+public class TestException3(message: String? = null, private val data: Any? = null) : Throwable(message)
+public class TestCancellationException(message: String? = null, private val data: Any? = null) : CancellationException(message)
+public class TestRuntimeException(message: String? = null, private val data: Any? = null) : RuntimeException(message)
+public class RecoverableTestException(message: String? = null) : RuntimeException(message)
+public class RecoverableTestCancellationException(message: String? = null) : CancellationException(message)
+
+public fun wrapperDispatcher(context: CoroutineContext): CoroutineContext {
+    val dispatcher = context[ContinuationInterceptor] as CoroutineDispatcher
+    return object : CoroutineDispatcher() {
+        override fun dispatch(context: CoroutineContext, block: Runnable) {
+            dispatcher.dispatch(context, block)
+        }
+    }
+}
+
+public suspend fun wrapperDispatcher(): CoroutineContext = wrapperDispatcher(coroutineContext)
