@@ -1,0 +1,30 @@
+plugins {
+    id "me.champeau.gradle.jmh" version "0.5.0-rc-2"
+//    id "net.ltgt.apt" version "0.21"
+//    id "com.github.johnrengelman.shadow" version "5.1.0"
+}
+
+compileJmhKotlin {
+    kotlinOptions {
+        jvmTarget = "1.8"
+        freeCompilerArgs += ['-Xjvm-default=enable']
+    }
+}
+
+// It is better to use the following to run benchmarks, otherwise you may get unexpected errors:
+// ./gradlew --no-daemon cleanJmhJar jmh -Pjmh="MyBenchmark"
+jmh {
+    jmhVersion = '1.21'
+    duplicateClassesStrategy DuplicatesStrategy.INCLUDE
+    failOnError = true
+    resultFormat = 'CSV'
+    if (project.hasProperty('jmh')) {
+        include = ".*" + project.jmh + ".*"
+    }
+//    includeTests = false
+}
+
+dependencies {
+    compile "org.openjdk.jmh:jmh-core:1.21"
+    compile project(':core')
+}
