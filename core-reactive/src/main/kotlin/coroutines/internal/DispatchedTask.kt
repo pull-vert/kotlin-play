@@ -6,6 +6,7 @@ import coroutines.scheduling.DeferredCompleter
 import kotlin.contracts.ExperimentalContracts
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
+import kotlin.runCatching
 
 internal abstract class DispatchedTask<T> : CompletableTask, Runnable {
     internal abstract val delegate: Continuation<T>
