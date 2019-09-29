@@ -279,3 +279,32 @@ public interface ChildHandle : DisposableHandle {
 //    @InternalCoroutinesApi
     public fun childCancelled(cause: Throwable): Boolean
 }
+
+// -------------------- CoroutineContext extensions --------------------
+
+/**
+ * Returns `true` when the [Job] of the coroutine in this context is still active
+ * (has not completed and was not cancelled yet).
+ *
+ * Check this property in long-running computation loops to support cancellation
+ * when [CoroutineScope.isActive] is not available:
+ *
+ * ```
+ * while (coroutineContext.isActive) {
+ *     // do some computation
+ * }
+ * ```
+ *
+ * The `coroutineContext.isActive` expression is a shortcut for `coroutineContext[Job]?.isActive == true`.
+ * See [Job.isActive].
+ */
+public val CoroutineContext.isActive: Boolean
+    get() = this[Job]?.isActive == true
+
+/**
+ * Cancels [Job] of this context with an optional cancellation cause.
+ * See [Job.cancel] for details.
+ */
+public fun CoroutineContext.cancel(cause: CancellationException? = null) {
+    this[Job]?.cancel(cause)
+}

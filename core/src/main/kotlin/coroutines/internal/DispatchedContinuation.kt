@@ -216,7 +216,23 @@ internal class DispatchedContinuation<in T>(
             continuation.resumeWithStackTrace(exception)
         }
     }
+
+    // used by "yield" implementation
+    internal fun dispatchYield(value: T) {
+        val context = continuation.context
+        _state = value
+        resumeMode = MODE_CANCELLABLE
+        dispatcher.dispatchYield(context, this)
+    }
+
+    override fun toString(): String =
+            "DispatchedContinuation[$dispatcher, ${continuation.toDebugString()}]"
 }
+
+internal fun DispatchedContinuation<Unit>.yieldUndispatched(): Boolean =
+        executeUnconfined(Unit, MODE_CANCELLABLE, doYield = true) {
+            run()
+        }
 
 /**
  * Executes given [block] as part of current event loop, updating current continuation

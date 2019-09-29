@@ -1,7 +1,34 @@
 package coroutines
 
+import kotlin.coroutines.AbstractCoroutineContextElement
 import kotlin.coroutines.CoroutineContext
 
+/**
+ * Creates a [CoroutineExceptionHandler] instance.
+ * @param handler a function which handles exception thrown by a coroutine
+ */
+@Suppress("FunctionName")
+public inline fun CoroutineExceptionHandler(crossinline handler: (CoroutineContext, Throwable) -> Unit): CoroutineExceptionHandler =
+        object : AbstractCoroutineContextElement(CoroutineExceptionHandler), CoroutineExceptionHandler {
+            override fun handleException(context: CoroutineContext, exception: Throwable) =
+                    handler.invoke(context, exception)
+        }
+
+/**
+ * An optional element in the coroutine context to handle uncaught exceptions.
+ *
+ * Normally, uncaught exceptions can only result from coroutines created using the [launch][CoroutineScope.launch] builder.
+ * A coroutine that was created using [async][CoroutineScope.async] always catches all its exceptions and represents them
+ * in the resulting [Deferred] object.
+ *
+ * By default, when no handler is installed, uncaught exception are handled in the following way:
+ * * If exception is [CancellationException] then it is ignored
+ *   (because that is the supposed mechanism to cancel the running coroutine)
+ * * Otherwise:
+ *     * if there is a [Job] in the context, then [Job.cancel] is invoked;
+ *     * Otherwise, all instances of [CoroutineExceptionHandler] found via [ServiceLoader]
+ *     * and current thread's [Thread.uncaughtExceptionHandler] are invoked.
+ **/
 public interface CoroutineExceptionHandler : CoroutineContext.Element {
     /**
      * Key for [CoroutineExceptionHandler] instance in the coroutine context.
