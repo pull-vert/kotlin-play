@@ -188,6 +188,26 @@ public suspend inline fun <T> suspendCancellableCoroutine(
         }
 
 /**
+ * Suspends coroutine similar to [suspendCancellableCoroutine], but with *atomic cancellation*.
+ *
+ * When suspended function throws [CancellationException] it means that the continuation was not resumed.
+ * As a side-effect of atomic cancellation, a thread-bound coroutine (to some UI thread, for example) may
+ * continue to execute even after it was cancelled from the same thread in the case when the continuation
+ * was already resumed and was posted for execution to the thread's queue.
+ *
+ * @suppress **This an internal API and should not be used from general code.**
+ */
+//@InternalCoroutinesApi
+public suspend inline fun <T> suspendAtomicCancellableCoroutine(
+        crossinline block: (CancellableContinuation<T>) -> Unit
+): T =
+        suspendCoroutineUninterceptedOrReturn { uCont ->
+            val cancellable = CancellableContinuationImpl(uCont.intercepted(), resumeMode = MODE_ATOMIC_DEFAULT)
+            block(cancellable)
+            cancellable.getResult()
+        }
+
+/**
  *  Suspends coroutine similar to [suspendAtomicCancellableCoroutine], but an instance of [CancellableContinuationImpl] is reused if possible.
  */
 internal suspend inline fun <T> suspendAtomicCancellableCoroutineReusable(

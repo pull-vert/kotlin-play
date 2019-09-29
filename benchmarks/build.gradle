@@ -22,9 +22,11 @@ jmh {
         include = ".*" + project.jmh + ".*"
     }
 //    includeTests = false
+//    jvmArgs = ['-Dkotlinx.coroutines.scheduler=off'] // use CommonPool with ForkJoinPool instead of Default
 }
 
 dependencies {
     compile "org.openjdk.jmh:jmh-core:1.21"
+    compile 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.2'
     compile project(':core')
 }

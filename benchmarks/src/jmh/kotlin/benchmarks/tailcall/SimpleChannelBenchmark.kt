@@ -6,12 +6,18 @@ package benchmarks.tailcall
 
 import coroutines.launch
 import coroutines.runBlocking
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.launch
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.*
 
-//Benchmark                                   Mode  Cnt     Score    Error  Units
-//SimpleChannelBenchmark.cancellableReusable  avgt    5  1933,004 ▒ 30,571  us/op
-//SimpleChannelBenchmark.nonCancellable       avgt    5   366,017 ▒ 17,627  us/op
+// ./gradlew --no-daemon cleanJmhJar jmh -Pjmh="SimpleChannelBenchmark"
+//Benchmark                                     Mode  Cnt     Score     Error  Units
+//SimpleChannelBenchmark.NonCancellable         avgt    5   374,729 ▒   7,718  us/op
+//SimpleChannelBenchmark.cancellable            avgt    5  3445,842 ▒ 266,652  us/op
+//SimpleChannelBenchmark.cancellableReusable    avgt    5  1895,527 ▒  62,275  us/op
+//SimpleChannelBenchmark.kotlinxCancellable     avgt    5  3345,329 ▒ 234,224  us/op
+//SimpleChannelBenchmark.kotlinxNonCancellable  avgt    5  1232,176 ▒  45,612  us/op
 
 @Warmup(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
 @Measurement(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
@@ -26,21 +32,10 @@ open class SimpleChannelBenchmark {
     @Volatile
     private var sink: Int = 0
 
-//    @Benchmark
-//    fun cancellable() = runBlocking {
-//        val ch = CancellableChannel()
-//        launch {
-//            repeat(iterations) { ch.send(it) }
-//        }
-//
-//        launch {
-//            repeat(iterations) { sink = ch.receive() }
-//        }
-//    }
-
+    @InternalCoroutinesApi
     @Benchmark
-    fun cancellableReusable() = runBlocking {
-        val ch = CancellableReusableChannel()
+    fun kotlinxCancellable() = kotlinx.coroutines.runBlocking {
+        val ch = KotlinxCancellableChannel()
         launch {
             repeat(iterations) { ch.send(it) }
         }
@@ -51,7 +46,7 @@ open class SimpleChannelBenchmark {
     }
 
     @Benchmark
-    fun nonCancellable() = runBlocking {
+    fun kotlinxNonCancellable() = kotlinx.coroutines.runBlocking {
         val ch = NonCancellableChannel()
         launch {
             repeat(iterations) { ch.send(it) }
@@ -63,4 +58,42 @@ open class SimpleChannelBenchmark {
             }
         }
     }
+
+//    @Benchmark
+//    fun cancellable() = runBlocking {
+//        val ch = CancellableChannel()
+//        launch {
+//            repeat(iterations) { ch.send(it) }
+//        }
+//
+//        launch {
+//            repeat(iterations) { sink = ch.receive() }
+//        }
+//    }
+//
+//    @Benchmark
+//    fun cancellableReusable() = runBlocking {
+//        val ch = CancellableReusableChannel()
+//        launch {
+//            repeat(iterations) { ch.send(it) }
+//        }
+//
+//        launch {
+//            repeat(iterations) { sink = ch.receive() }
+//        }
+//    }
+//
+//    @Benchmark
+//    fun NonCancellable() = runBlocking {
+//        val ch = NonCancellableChannel()
+//        launch {
+//            repeat(iterations) { ch.send(it) }
+//        }
+//
+//        launch {
+//            repeat(iterations) {
+//                sink = ch.receive()
+//            }
+//        }
+//    }
 }
