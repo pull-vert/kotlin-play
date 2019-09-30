@@ -3,7 +3,6 @@ package coroutines.internal
 import coroutines.*
 import coroutines.scheduling.CompletableTask
 import coroutines.scheduling.DeferredCompleter
-import kotlin.contracts.ExperimentalContracts
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.runCatching
@@ -15,7 +14,6 @@ internal abstract class DispatchedTask<T> : CompletableTask, Runnable {
 
     internal open fun cancelResult(state: Any?, cause: Throwable) {}
 
-    @ExperimentalContracts
     override fun run(taskCompleter: DeferredCompleter) {
         var fatalException: Throwable? = null
         try {
@@ -29,7 +27,6 @@ internal abstract class DispatchedTask<T> : CompletableTask, Runnable {
         }
     }
 
-    @ExperimentalContracts
     override fun run() {
         val delegate = delegate as DispatchedContinuation<T>
         val continuation = delegate.continuation
