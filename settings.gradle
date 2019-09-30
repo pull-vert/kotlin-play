@@ -3,4 +3,5 @@ rootProject.name = 'kotlin-play'
 include('benchmarks')
 
 include 'core'
+include 'core1'
 include 'core-reactive'
