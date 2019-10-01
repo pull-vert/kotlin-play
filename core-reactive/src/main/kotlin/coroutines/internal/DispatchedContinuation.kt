@@ -43,6 +43,19 @@ internal class DispatchedContinuation<T>(
     }
 
     @Suppress("NOTHING_TO_INLINE") // we need it inline to save us an entry on the stack
+    inline fun resumeWithExecutor(value: T) {
+        _state = DispatchedState.success(value)
+//            resumeMode = MODE_ATOMIC_DEFAULT
+        dispatcher.execute(this)
+//        } else {
+//            executeUnconfined(value, MODE_CANCELLABLE) {
+//                if (!resumeCancelled()) {
+//                    resumeUndispatched(value)
+//                }
+//            }
+    }
+
+    @Suppress("NOTHING_TO_INLINE") // we need it inline to save us an entry on the stack
     inline fun resumeCancellable(value: T) {
 //        if (dispatcher.isDispatchNeeded(context)) {
         _state = DispatchedState.success(value)

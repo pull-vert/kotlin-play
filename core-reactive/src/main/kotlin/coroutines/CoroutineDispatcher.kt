@@ -35,9 +35,15 @@ abstract class CoroutineDispatcher : AbstractCoroutineContextElement(Continuatio
      * This method should generally be exception-safe. An exception thrown from this method
      * may leave the coroutines that use this dispatcher in the inconsistent and hard to debug state.
      */
-    fun dispatch(context: CoroutineContext, task: Runnable) {
-        TODO()
-    }
+    abstract fun dispatch(context: CoroutineContext, block: Runnable)
+
+    /**
+     * Dispatches execution of a runnable [block] onto another thread with a Executor.
+     *
+     * This method should generally be exception-safe. An exception thrown from this method
+     * may leave the coroutines that use this dispatcher in the inconsistent and hard to debug state.
+     */
+    abstract fun execute(block: Runnable)
 
     /**
      * Returns a continuation that wraps the provided [continuation], thus intercepting all resumptions.
