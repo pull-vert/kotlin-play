@@ -56,6 +56,38 @@ internal fun <E : Throwable> recoverStackTrace(exception: E, continuation: Conti
     return recoverFromStackFrame(exception, continuation)
 }
 
+private const val stackTraceRecoveryClass = "kotlinx.coroutines.internal.StackTraceRecoveryKt"
+
+private val stackTraceRecoveryClassName = runCatching {
+    Class.forName(stackTraceRecoveryClass).canonicalName
+}.getOrElse { stackTraceRecoveryClass }
+
+internal fun <E : Throwable> recoverStackTrace(exception: E): E {
+    if (!RECOVER_STACK_TRACES) return exception
+    // No unwrapping on continuation-less path: exception is not reported multiple times via slow paths
+    val copy = tryCopyException(exception) ?: return exception
+    return copy.sanitizeStackTrace()
+}
+
+private fun <E : Throwable> E.sanitizeStackTrace(): E {
+    val stackTrace = stackTrace
+    val size = stackTrace.size
+    val lastIntrinsic = stackTrace.frameIndex(stackTraceRecoveryClassName)
+    val startIndex = lastIntrinsic + 1
+    val endIndex = stackTrace.frameIndex(baseContinuationImplClassName)
+    val adjustment = if (endIndex == -1) 0 else size - endIndex
+    val trace = Array(size - lastIntrinsic - adjustment) {
+        if (it == 0) {
+            artificialFrame("Coroutine boundary")
+        } else {
+            stackTrace[startIndex + it - 1]
+        }
+    }
+
+    setStackTrace(trace)
+    return this
+}
+
 private fun <E : Throwable> recoverFromStackFrame(exception: E, continuation: CoroutineStackFrame): E {
     /*
     * Here we are checking whether exception has already recovered stacktrace.
