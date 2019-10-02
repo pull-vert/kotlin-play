@@ -4,20 +4,23 @@
 
 package benchmarks.tailcall
 
-import coroutines.channels.*
 import coroutines.launch
 import coroutines.runBlocking
-import kotlinx.coroutines.InternalCoroutinesApi
-import kotlinx.coroutines.launch
 import org.openjdk.jmh.annotations.*
-import java.util.concurrent.*
+import java.util.concurrent.TimeUnit
 
-// ./gradlew --no-daemon cleanJmhJar jmh -Pjmh="SimpleChannelBenchmark"
+// ./gradlew --no-daemon cleanJmhJar jmh -Pjmh="ChannelBenchmark"
 //Benchmark                                     Mode  Cnt     Score     Error  Units
-//SimpleChannelBenchmark.NonCancellable          avgt    5  1144,914 ▒   25,979  us/op
-//SimpleChannelBenchmark.NonCancellableProducer  avgt    5   855,944 ▒   41,366  us/op
-//SimpleChannelBenchmark.cancellable             avgt    5  3688,167 ▒ 1610,779  us/op
-//SimpleChannelBenchmark.cancellableReusable     avgt    5  2032,219 ▒ 1090,833  us/op
+//ChannelBenchmark.cancellable                  avgt    5  4200,194 ± 118,223  us/op
+//ChannelBenchmark.cancellableIterableReusable  avgt    5  1512,309 ±  36,607  us/op
+//ChannelBenchmark.cancellableProducerReusable  avgt    5  1717,418 ±  32,162  us/op
+//ChannelBenchmark.cancellableReusable          avgt    5  2580,033 ± 111,864  us/op
+//ChannelBenchmark.nonCancellable               avgt    5  1545,899 ±  68,351  us/op
+//ChannelBenchmark.nonCancellableIterable       avgt    5   728,980 ±  11,623  us/op
+//ChannelBenchmark.nonCancellableProducer       avgt    5   976,064 ±  69,730  us/op
+
+
+
 
 @Warmup(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
 @Measurement(iterations = 5, time = 1, timeUnit = TimeUnit.SECONDS)
@@ -25,7 +28,7 @@ import java.util.concurrent.*
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 @State(Scope.Benchmark)
-open class SimpleChannelBenchmark {
+open class ChannelBenchmark {
 
     private val iterations = 10_000
 
@@ -84,7 +87,7 @@ open class SimpleChannelBenchmark {
     }
 
     @Benchmark
-    fun NonCancellable() = runBlocking {
+    fun nonCancellable() = runBlocking {
         val ch = NonCancellableChannel()
         launch {
             repeat(iterations) { ch.send(it) }
@@ -98,8 +101,41 @@ open class SimpleChannelBenchmark {
     }
 
     @Benchmark
-    fun NonCancellableProducer() = runBlocking {
-        val ch = NonCancellableProducerChannel(iterations) { it }
+    fun cancellableProducerReusable() = runBlocking {
+        val ch = CancellableProducerReusableChannel(0..iterations) { it }
+
+        launch {
+            repeat(iterations) {
+                sink = ch.receive()
+            }
+        }
+    }
+
+    @Benchmark
+    fun nonCancellableProducer() = runBlocking {
+        val ch = NonCancellableProducerChannel(0..iterations) { it }
+
+        launch {
+            repeat(iterations) {
+                sink = ch.receive()
+            }
+        }
+    }
+
+    @Benchmark
+    fun cancellableIterableReusable() = runBlocking {
+        val ch = CancellableIterableReusableChannel(0..iterations)
+
+        launch {
+            repeat(iterations) {
+                sink = ch.receive()
+            }
+        }
+    }
+
+    @Benchmark
+    fun nonCancellableIterable() = runBlocking {
+        val ch = NonCancellableIterableChannel(0..iterations)
 
         launch {
             repeat(iterations) {
