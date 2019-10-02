@@ -74,68 +74,24 @@ open class ChannelBenchmark {
 //        }
 //    }
 //
-//    @Benchmark
-//    fun cancellableReusable() = runBlocking {
-//        val ch = CancellableReusableChannel()
-//        launch {
-//            repeat(iterations) { ch.send(it) }
-//        }
-//
-//        launch {
-//            repeat(iterations) { sink = ch.receive() }
-//        }
-//    }
-//
-//    @Benchmark
-//    fun nonCancellable() = runBlocking {
-//        val ch = NonCancellableChannel()
-//        launch {
-//            repeat(iterations) { ch.send(it) }
-//        }
-//
-//        launch {
-//            repeat(iterations) {
-//                sink = ch.receive()
-//            }
-//        }
-//    }
-//
-//    @Benchmark
-//    fun cancellableProducerReusable() = runBlocking {
-//        val ch = CancellableProducerReusableChannel(0..iterations) { it }
-//
-//        launch {
-//            repeat(iterations) {
-//                sink = ch.receive()
-//            }
-//        }
-//    }
-//
-//    @Benchmark
-//    fun nonCancellableProducer() = runBlocking {
-//        val ch = NonCancellableProducerChannel(0..iterations) { it }
-//
-//        launch {
-//            repeat(iterations) {
-//                sink = ch.receive()
-//            }
-//        }
-//    }
-//
-//    @Benchmark
-//    fun cancellableIterableReusable() = runBlocking {
-//        val ch = CancellableIterableReusableChannel(0..iterations)
-//
-//        launch {
-//            repeat(iterations) {
-//                sink = ch.receive()
-//            }
-//        }
-//    }
+    @Benchmark
+    fun cancellableReusable() = runBlocking {
+        val ch = CancellableReusableChannel()
+        launch {
+            repeat(iterations) { ch.send(it) }
+        }
+
+        launch {
+            repeat(iterations) { sink = ch.receive() }
+        }
+    }
 
     @Benchmark
-    fun nonCancellableIterable() = runBlocking {
-        val ch = NonCancellableIterableChannel(0..iterations)
+    fun nonCancellable() = runBlocking {
+        val ch = NonCancellableChannel()
+        launch {
+            repeat(iterations) { ch.send(it) }
+        }
 
         launch {
             repeat(iterations) {
@@ -145,8 +101,41 @@ open class ChannelBenchmark {
     }
 
     @Benchmark
-    fun nonCancellableIterableExtension() = runBlocking {
-        val ch = IntRange(0, iterations).toProducerChannel()
+    fun cancellableProducerReusable() = runBlocking {
+        val ch = CancellableProducerReusableChannel(0..iterations) { it }
+
+        launch {
+            repeat(iterations) {
+                sink = ch.receive()
+            }
+        }
+    }
+
+    @Benchmark
+    fun nonCancellableProducer() = runBlocking {
+        val ch = NonCancellableProducerChannel(0..iterations) { it }
+
+        launch {
+            repeat(iterations) {
+                sink = ch.receive()
+            }
+        }
+    }
+
+    @Benchmark
+    fun cancellableIterableReusable() = runBlocking {
+        val ch = CancellableIterableReusableChannel(0..iterations)
+
+        launch {
+            repeat(iterations) {
+                sink = ch.receive()
+            }
+        }
+    }
+
+    @Benchmark
+    fun nonCancellableIterable() = runBlocking {
+        val ch = NonCancellableIterableChannel(0..iterations)
 
         launch {
             repeat(iterations) {

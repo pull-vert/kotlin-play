@@ -1,7 +1,6 @@
 package benchmarks.tailcall
 
 import coroutines.*
-import kotlinx.coroutines.flow.asFlow
 import kotlin.coroutines.*
 import kotlin.coroutines.intrinsics.*
 
@@ -44,15 +43,5 @@ class NonCancellableIterableChannel<out T> (iterable: Iterable<T>) : SimpleProdu
     override suspend fun receive(): T = suspendCoroutineUninterceptedOrReturn {
         it.intercepted().resume(iterator.next())
         COROUTINE_SUSPENDED
-    }
-}
-
-fun <T> Iterable<T>.toProducerChannel() : SimpleProducerChannel<T> {
-    val iterator = this.iterator()
-    return object : SimpleProducerChannel<T> {
-        override suspend fun receive(): T = suspendCoroutineUninterceptedOrReturn {
-            it.intercepted().resume(iterator.next())
-            COROUTINE_SUSPENDED
-        }
     }
 }
