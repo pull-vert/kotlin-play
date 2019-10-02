@@ -1,6 +1,7 @@
 package benchmarks.tailcall
 
 import coroutines.*
+import kotlinx.coroutines.flow.asFlow
 import kotlin.coroutines.*
 import kotlin.coroutines.intrinsics.*
 
@@ -27,6 +28,16 @@ class CancellableProducerReusableChannel<R, T>(iterable: Iterable<R>, private va
     }
 }
 
+@Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
+class CancellableIterableReusableChannel<out T> (iterable: Iterable<T>) : SimpleProducerChannel<T> {
+    private val iterator = iterable.iterator()
+
+    override suspend fun receive(): T = suspendAtomicCancellableCoroutineReusable {
+        it.intercepted().resume(iterator.next())
+        COROUTINE_SUSPENDED
+    }
+}
+
 class NonCancellableIterableChannel<out T> (iterable: Iterable<T>) : SimpleProducerChannel<T> {
     private val iterator = iterable.iterator()
 
@@ -36,12 +47,12 @@ class NonCancellableIterableChannel<out T> (iterable: Iterable<T>) : SimpleProdu
     }
 }
 
-@Suppress("INVISIBLE_MEMBER", "INVISIBLE_REFERENCE")
-class CancellableIterableReusableChannel<out T> (iterable: Iterable<T>) : SimpleProducerChannel<T> {
-    private val iterator = iterable.iterator()
-
-    override suspend fun receive(): T = suspendAtomicCancellableCoroutineReusable {
-        it.intercepted().resume(iterator.next())
-        COROUTINE_SUSPENDED
+fun <T> Iterable<T>.toProducerChannel() : SimpleProducerChannel<T> {
+    val iterator = this.iterator()
+    return object : SimpleProducerChannel<T> {
+        override suspend fun receive(): T = suspendCoroutineUninterceptedOrReturn {
+            it.intercepted().resume(iterator.next())
+            COROUTINE_SUSPENDED
+        }
     }
 }
