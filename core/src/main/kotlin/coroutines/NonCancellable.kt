@@ -6,7 +6,7 @@
 package coroutines
 
 import java.util.concurrent.CancellationException
-import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.*
 
 /**
  * A non-cancelable job that is always [active][Job.isActive]. It is designed for [withContext] function
@@ -39,6 +39,13 @@ public object NonCancellable : AbstractCoroutineContextElement(Job), Job {
      * @suppress **This an internal API and should not be used from general code.**
      */
 //    @InternalCoroutinesApi
+    override val isCancelled: Boolean get() = false
+
+    /**
+     * Always returns `false`.
+     * @suppress **This an internal API and should not be used from general code.**
+     */
+//    @InternalCoroutinesApi
     override fun start(): Boolean = false
 
     /**
@@ -50,6 +57,13 @@ public object NonCancellable : AbstractCoroutineContextElement(Job), Job {
         throw UnsupportedOperationException("This job is always active")
     }
 
+//    /**
+//     * Always throws [UnsupportedOperationException].
+//     * @suppress **This an internal API and should not be used from general code.**
+//     */
+//    override val onJoin: SelectClause0
+//        get() = throw UnsupportedOperationException("This job is always active")
+
     /**
      * Always throws [IllegalStateException].
      * @suppress **This an internal API and should not be used from general code.**
@@ -58,12 +72,20 @@ public object NonCancellable : AbstractCoroutineContextElement(Job), Job {
     override fun getCancellationException(): CancellationException = throw IllegalStateException("This job is always active")
 
     /**
+     * @suppress **This an internal API and should not be used from general code.**
+     */
+    @Suppress("OverridingDeprecatedMember")
+//    @InternalCoroutinesApi
+    override fun invokeOnCompletion(handler: CompletionHandler): DisposableHandle =
+        NonDisposableHandle
+
+    /**
      * Always returns no-op handle.
      * @suppress **This an internal API and should not be used from general code.**
      */
 //    @InternalCoroutinesApi
     override fun invokeOnCompletion(onCancelling: Boolean, invokeImmediately: Boolean, handler: CompletionHandler): DisposableHandle =
-            NonDisposableHandle
+        NonDisposableHandle
 
     /**
      * Does nothing.
@@ -71,6 +93,14 @@ public object NonCancellable : AbstractCoroutineContextElement(Job), Job {
      */
 //    @InternalCoroutinesApi
     override fun cancel(cause: CancellationException?) {}
+
+    /**
+     * Always returns [emptySequence].
+     * @suppress **This an internal API and should not be used from general code.**
+     */
+//    @InternalCoroutinesApi
+    override val children: Sequence<Job>
+        get() = emptySequence()
 
     /**
      * Always returns [NonDisposableHandle] and does not do anything.

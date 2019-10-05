@@ -1,11 +1,22 @@
 package coroutines
 
+import coroutines.internal.recoverStackTrace
 import kotlinx.atomicfu.atomic
 import java.util.concurrent.CancellationException
 import kotlin.coroutines.Continuation
 
 internal fun <T> Result<T>.toState(): Any? =
         if (isSuccess) getOrThrow() else CompletedExceptionally(exceptionOrNull()!!) // todo: need to do it better
+
+internal fun <T> Result<T>.toState(caller: CancellableContinuation<*>): Any? = fold({ it },
+        { CompletedExceptionally(recoverStackTrace(it, caller)) })
+
+@Suppress("RESULT_CLASS_IN_RETURN_TYPE", "UNCHECKED_CAST")
+internal fun <T> recoverResult(state: Any?, uCont: Continuation<T>): Result<T> =
+        if (state is CompletedExceptionally)
+            Result.failure(recoverStackTrace(state.cause, uCont))
+        else
+            Result.success(state as T)
 
 /**
  * Class for an internal state of a job that was cancelled (completed exceptionally).

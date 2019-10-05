@@ -3,6 +3,7 @@ package coroutines.internal
 import coroutines.RECOVER_STACK_TRACES
 import java.util.*
 import kotlin.coroutines.Continuation
+import kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn
 
 /*
  * `Class.forName(name).canonicalName` instead of plain `name` is required to properly handle
@@ -157,6 +158,15 @@ private fun StackTraceElement.elementWiseEquals(e: StackTraceElement): Boolean {
 }
 
 internal typealias CoroutineStackFrame = kotlin.coroutines.jvm.internal.CoroutineStackFrame
+
+@Suppress("NOTHING_TO_INLINE")
+internal suspend inline fun recoverAndThrow(exception: Throwable): Nothing {
+    if (!RECOVER_STACK_TRACES) throw exception
+    suspendCoroutineUninterceptedOrReturn<Nothing> {
+        if (it !is CoroutineStackFrame) throw exception
+        throw recoverFromStackFrame(exception, it)
+    }
+}
 
 /**
  * The opposite of [recoverStackTrace].

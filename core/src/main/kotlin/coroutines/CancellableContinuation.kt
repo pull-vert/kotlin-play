@@ -1,12 +1,12 @@
+/*
+ * Copyright 2016-2018 JetBrains s.r.o. Use of this source code is governed by the Apache 2.0 license.
+ */
+
 package coroutines
 
-import coroutines.internal.DispatchedContinuation
-import coroutines.internal.LockFreeLinkedListNode
-import kotlin.coroutines.Continuation
-import kotlin.coroutines.intrinsics.intercepted
-import kotlin.coroutines.intrinsics.suspendCoroutineUninterceptedOrReturn
-import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
+import coroutines.internal.*
+import kotlin.coroutines.*
+import kotlin.coroutines.intrinsics.*
 
 // --------------- cancellable continuations ---------------
 
@@ -96,6 +96,21 @@ public interface CancellableContinuation<in T> : Continuation<T> {
 //    @InternalCoroutinesApi
     public fun completeResume(token: Any)
 
+//    /**
+//     * Legacy function that turned on cancellation behavior in [suspendCancellableCoroutine] before kotlinx.coroutines 1.1.0.
+//     * This function does nothing and is left only for binary compatibility with old compiled code.
+//     *
+//     * @suppress **Deprecated**: This function is no longer used.
+//     *   It is left for binary compatibility with code compiled before kotlinx.coroutines 1.1.0.
+//     */
+//    @Deprecated(
+//        level = DeprecationLevel.HIDDEN,
+//        message = "This function is no longer used. " +
+//            "It is left for binary compatibility with code compiled before kotlinx.coroutines 1.1.0. "
+//    )
+//    @InternalCoroutinesApi
+//    public fun initCancellability()
+
     /**
      * Cancels this continuation with an optional cancellation `cause`. The result is `true` if this continuation was
      * cancelled as a result of this invocation, and `false` otherwise.
@@ -177,21 +192,21 @@ public interface CancellableContinuation<in T> : Continuation<T> {
  * the [block]. This function throws a [CancellationException] if the coroutine is cancelled or completed while suspended.
  */
 public suspend inline fun <T> suspendCancellableCoroutine(
-        crossinline block: (CancellableContinuation<T>) -> Unit
+    crossinline block: (CancellableContinuation<T>) -> Unit
 ): T =
-        suspendCoroutineUninterceptedOrReturn { uCont ->
-            val cancellable = CancellableContinuationImpl(uCont.intercepted(), resumeMode = MODE_CANCELLABLE)
-            // NOTE: Before version 1.1.0 the following invocation was inlined here, so invocation of this
-            // method indicates that the code was compiled by kotlinx.coroutines < 1.1.0
-            // cancellable.initCancellability()
-            block(cancellable)
-            cancellable.getResult()
-        }
+    suspendCoroutineUninterceptedOrReturn { uCont ->
+        val cancellable = CancellableContinuationImpl(uCont.intercepted(), resumeMode = MODE_CANCELLABLE)
+        // NOTE: Before version 1.1.0 the following invocation was inlined here, so invocation of this
+        // method indicates that the code was compiled by kotlinx.coroutines < 1.1.0
+        // cancellable.initCancellability()
+        block(cancellable)
+        cancellable.getResult()
+    }
 
 /**
- * Suspends coroutine similar to [suspendCancellableCoroutine], but with *atomic cancellation*.
+ * Suspends the coroutine like [suspendCancellableCoroutine], but with *atomic cancellation*.
  *
- * When suspended function throws [CancellationException] it means that the continuation was not resumed.
+ * When the suspended function throws a [CancellationException], it means that the continuation was not resumed.
  * As a side-effect of atomic cancellation, a thread-bound coroutine (to some UI thread, for example) may
  * continue to execute even after it was cancelled from the same thread in the case when the continuation
  * was already resumed and was posted for execution to the thread's queue.
@@ -200,24 +215,24 @@ public suspend inline fun <T> suspendCancellableCoroutine(
  */
 //@InternalCoroutinesApi
 public suspend inline fun <T> suspendAtomicCancellableCoroutine(
-        crossinline block: (CancellableContinuation<T>) -> Unit
+    crossinline block: (CancellableContinuation<T>) -> Unit
 ): T =
-        suspendCoroutineUninterceptedOrReturn { uCont ->
-            val cancellable = CancellableContinuationImpl(uCont.intercepted(), resumeMode = MODE_ATOMIC_DEFAULT)
-            block(cancellable)
-            cancellable.getResult()
-        }
+    suspendCoroutineUninterceptedOrReturn { uCont ->
+        val cancellable = CancellableContinuationImpl(uCont.intercepted(), resumeMode = MODE_ATOMIC_DEFAULT)
+        block(cancellable)
+        cancellable.getResult()
+    }
 
 /**
  *  Suspends coroutine similar to [suspendAtomicCancellableCoroutine], but an instance of [CancellableContinuationImpl] is reused if possible.
  */
 internal suspend inline fun <T> suspendAtomicCancellableCoroutineReusable(
-        crossinline block: (CancellableContinuation<T>) -> Unit
+    crossinline block: (CancellableContinuation<T>) -> Unit
 ): T = suspendCoroutineUninterceptedOrReturn { uCont ->
-    val cancellable = getOrCreateCancellableContinuation(uCont.intercepted())
-    block(cancellable)
-    cancellable.getResult()
-}
+        val cancellable = getOrCreateCancellableContinuation(uCont.intercepted())
+        block(cancellable)
+        cancellable.getResult()
+    }
 
 internal fun <T> getOrCreateCancellableContinuation(delegate: Continuation<T>): CancellableContinuationImpl<T> {
     // If used outside of our dispatcher
@@ -239,14 +254,28 @@ internal fun <T> getOrCreateCancellableContinuation(delegate: Continuation<T>): 
      * 2) Continuation was cancelled. Then we should prevent any further reuse and bail out.
      */
     return delegate.claimReusableCancellableContinuation()?.takeIf { it.resetState() }
-            ?: return CancellableContinuationImpl(delegate, MODE_ATOMIC_DEFAULT)
+        ?: return CancellableContinuationImpl(delegate, MODE_ATOMIC_DEFAULT)
 }
+
+/**
+ * @suppress **Deprecated**
+ */
+@Deprecated(
+    message = "holdCancellability parameter is deprecated and is no longer used",
+    replaceWith = ReplaceWith("suspendAtomicCancellableCoroutine(block)")
+)
+//@InternalCoroutinesApi
+public suspend inline fun <T> suspendAtomicCancellableCoroutine(
+    holdCancellability: Boolean = false,
+    crossinline block: (CancellableContinuation<T>) -> Unit
+): T =
+    suspendAtomicCancellableCoroutine(block)
 
 /**
  * Removes the specified [node] on cancellation.
  */
 internal fun CancellableContinuation<*>.removeOnCancellation(node: LockFreeLinkedListNode) =
-        invokeOnCancellation(handler = RemoveOnCancel(node).asHandler)
+    invokeOnCancellation(handler = RemoveOnCancel(node).asHandler)
 
 /**
  * Disposes the specified [handle] when this continuation is cancelled.
@@ -260,7 +289,7 @@ internal fun CancellableContinuation<*>.removeOnCancellation(node: LockFreeLinke
  */
 //@InternalCoroutinesApi
 public fun CancellableContinuation<*>.disposeOnCancellation(handle: DisposableHandle) =
-        invokeOnCancellation(handler = DisposeOnCancel(handle).asHandler)
+    invokeOnCancellation(handler = DisposeOnCancel(handle).asHandler)
 
 // --------------- implementation details ---------------
 

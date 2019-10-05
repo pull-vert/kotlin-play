@@ -3,11 +3,18 @@ package coroutines.internal
 import coroutines.*
 import coroutines.CompletedExceptionally
 import coroutines.CoroutinesInternalError
-import coroutines.isCancellableMode
 import coroutines.scheduling.SchedulerTask
 import coroutines.withCoroutineContext
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+
+@PublishedApi internal const val MODE_ATOMIC_DEFAULT = 0 // schedule non-cancellable dispatch for suspendCoroutine
+@PublishedApi internal const val MODE_CANCELLABLE = 1    // schedule cancellable dispatch for suspendCancellableCoroutine
+@PublishedApi internal const val MODE_UNDISPATCHED = 2   // when the thread is right, but need to mark it with current coroutine
+
+internal val Int.isCancellableMode get() = this == MODE_CANCELLABLE
+internal val Int.isDispatchedMode get() = this == MODE_ATOMIC_DEFAULT || this == MODE_CANCELLABLE
 
 internal abstract class DispatchedTask<in T>(
         @JvmField public var resumeMode: Int
@@ -46,7 +53,7 @@ internal abstract class DispatchedTask<in T>(
                     cancelResult(state, cause)
                     continuation.resumeWithStackTrace(cause)
                 } else {
-                    if (exception != null) continuation.resumeWithStackTrace(exception)
+                    if (exception != null) continuation.resumeWithException(exception)
                     else continuation.resume(getSuccessfulResult(state))
                 }
             }
@@ -90,7 +97,7 @@ internal abstract class DispatchedTask<in T>(
     }
 }
 
-internal fun <T> DispatchedTask<T>.dispatch(mode: Int = MODE_CANCELLABLE) {
+internal fun <T> DispatchedTask<T>.dispatch(mode: Int) {
     val delegate = this.delegate
     if (mode.isDispatchedMode && delegate is DispatchedContinuation<*> && mode.isCancellableMode == resumeMode.isCancellableMode) {
         // dispatch directly using this instance's Runnable implementation
@@ -106,21 +113,17 @@ internal fun <T> DispatchedTask<T>.dispatch(mode: Int = MODE_CANCELLABLE) {
     }
 }
 
+@Suppress("UNCHECKED_CAST")
 internal fun <T> DispatchedTask<T>.resume(delegate: Continuation<T>, useMode: Int) {
     // slow-path - use delegate
     val state = takeState()
-    val exception = getExceptionalResult(state)
-    if (exception != null) {
-        /*
-         * Recover stacktrace for non-dispatched tasks.
-         * We usually do not recover stacktrace in a `resume` as all resumes go through `DispatchedTask.run`
-         * and we recover stacktraces there, but this is not the case for a `suspend fun main()` that knows nothing about
-         * kotlinx.coroutines and DispatchedTask
-         */
-        val recovered = if (delegate is DispatchedTask<*>) exception else recoverStackTrace(exception, delegate)
-        delegate.resumeWithExceptionMode(recovered, useMode)
-    } else {
-        delegate.resumeMode(getSuccessfulResult(state), useMode)
+    val exception = getExceptionalResult(state)?.let { recoverStackTrace(it, delegate) }
+    val result = if (exception != null) Result.failure(exception) else Result.success(state as T)
+    when (useMode) {
+        MODE_ATOMIC_DEFAULT -> delegate.resumeWith(result)
+        MODE_CANCELLABLE -> delegate.resumeCancellableWith(result)
+        MODE_UNDISPATCHED -> (delegate as DispatchedContinuation).resumeUndispatchedWith(result)
+        else -> error("Invalid mode $useMode")
     }
 }
 
@@ -157,26 +160,6 @@ internal inline fun DispatchedTask<*>.runUnconfinedEventLoop(
     } finally {
         eventLoop.decrementUseCount(unconfined = true)
     }
-}
-
-internal fun <T> Continuation<T>.resumeCancellable(value: T) = when (this) {
-    is DispatchedContinuation -> resumeCancellable(value)
-    else -> resume(value)
-}
-
-internal fun <T> Continuation<T>.resumeCancellableWithException(exception: Throwable) = when (this) {
-    is DispatchedContinuation -> resumeCancellableWithException(exception)
-    else -> resumeWithStackTrace(exception)
-}
-
-internal fun <T> Continuation<T>.resumeDirect(value: T) = when (this) {
-    is DispatchedContinuation -> continuation.resume(value)
-    else -> resume(value)
-}
-
-internal fun <T> Continuation<T>.resumeDirectWithException(exception: Throwable) = when (this) {
-    is DispatchedContinuation -> continuation.resumeWithStackTrace(exception)
-    else -> resumeWithStackTrace(exception)
 }
 
 @Suppress("NOTHING_TO_INLINE")

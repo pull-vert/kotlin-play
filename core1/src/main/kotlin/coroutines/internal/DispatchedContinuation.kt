@@ -5,9 +5,10 @@
 package coroutines.internal
 
 import coroutines.*
-import kotlinx.atomicfu.*
-import kotlin.coroutines.*
-import kotlin.jvm.*
+import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.loop
+import kotlin.coroutines.Continuation
+import kotlin.coroutines.resumeWithException
 
 //@SharedImmutable
 private val UNDEFINED = Symbol("UNDEFINED")
@@ -16,8 +17,8 @@ private val UNDEFINED = Symbol("UNDEFINED")
 internal val REUSABLE_CLAIMED = Symbol("REUSABLE_CLAIMED")
 
 internal class DispatchedContinuation<in T>(
-        @JvmField val dispatcher: CoroutineDispatcher,
-        @JvmField val continuation: Continuation<T>
+    @JvmField val dispatcher: CoroutineDispatcher,
+    @JvmField val continuation: Continuation<T>
 ) : DispatchedTask<T>(MODE_ATOMIC_DEFAULT), CoroutineStackFrame, Continuation<T> by continuation {
     @JvmField
     @Suppress("PropertyName")
@@ -174,33 +175,19 @@ internal class DispatchedContinuation<in T>(
         }
     }
 
-    @Suppress("NOTHING_TO_INLINE") // we need it inline to save us an entry on the stack
-    inline fun resumeCancellable(value: T) {
+    // We inline it to save an entry on the stack in cases where it shows (unconfined dispatcher)
+    // It is used only in Continuation<T>.resumeCancellableWith
+    @Suppress("NOTHING_TO_INLINE")
+    inline fun resumeCancellableWith(result: Result<T>) {
+        val state = result.toState()
         if (dispatcher.isDispatchNeeded(context)) {
-            _state = value
-            resumeMode = MODE_CANCELLABLE
-            dispatcher.dispatch(context, this)
-        } else {
-            executeUnconfined(value, MODE_CANCELLABLE) {
-                if (!resumeCancelled()) {
-                    resumeUndispatched(value)
-                }
-            }
-        }
-    }
-
-    @Suppress("NOTHING_TO_INLINE") // we need it inline to save us an entry on the stack
-    inline fun resumeCancellableWithException(exception: Throwable) {
-        val context = continuation.context
-        val state = CompletedExceptionally(exception)
-        if (dispatcher.isDispatchNeeded(context)) {
-            _state = CompletedExceptionally(exception)
+            _state = state
             resumeMode = MODE_CANCELLABLE
             dispatcher.dispatch(context, this)
         } else {
             executeUnconfined(state, MODE_CANCELLABLE) {
                 if (!resumeCancelled()) {
-                    resumeUndispatchedWithException(exception)
+                    resumeUndispatchedWith(result)
                 }
             }
         }
@@ -218,16 +205,9 @@ internal class DispatchedContinuation<in T>(
     }
 
     @Suppress("NOTHING_TO_INLINE") // we need it inline to save us an entry on the stack
-    inline fun resumeUndispatched(value: T) {
+    inline fun resumeUndispatchedWith(result: Result<T>) {
         withCoroutineContext(context, countOrElement) {
-            continuation.resume(value)
-        }
-    }
-
-    @Suppress("NOTHING_TO_INLINE") // we need it inline to save us an entry on the stack
-    inline fun resumeUndispatchedWithException(exception: Throwable) {
-        withCoroutineContext(context, countOrElement) {
-            continuation.resumeWithStackTrace(exception)
+            continuation.resumeWith(result)
         }
     }
 
@@ -240,13 +220,25 @@ internal class DispatchedContinuation<in T>(
     }
 
     override fun toString(): String =
-            "DispatchedContinuation[$dispatcher, ${continuation.toDebugString()}]"
+        "DispatchedContinuation[$dispatcher, ${continuation.toDebugString()}]"
+}
+
+/**
+ * It is not inline to save bytecode (it is pretty big and used in many places)
+ * and we leave it public so that its name is not mangled in use stack traces if it shows there.
+ * It may appear in stack traces when coroutines are started/resumed with unconfined dispatcher.
+ * @suppress **This an internal API and should not be used from general code.**
+ */
+//@InternalCoroutinesApi
+public fun <T> Continuation<T>.resumeCancellableWith(result: Result<T>) = when (this) {
+    is DispatchedContinuation -> resumeCancellableWith(result)
+    else -> resumeWith(result)
 }
 
 internal fun DispatchedContinuation<Unit>.yieldUndispatched(): Boolean =
-        executeUnconfined(Unit, MODE_CANCELLABLE, doYield = true) {
-            run()
-        }
+    executeUnconfined(Unit, MODE_CANCELLABLE, doYield = true) {
+        run()
+    }
 
 /**
  * Executes given [block] as part of current event loop, updating current continuation
@@ -255,8 +247,8 @@ internal fun DispatchedContinuation<Unit>.yieldUndispatched(): Boolean =
  * Returns `true` if execution of continuation was queued (trampolined) or `false` otherwise.
  */
 private inline fun DispatchedContinuation<*>.executeUnconfined(
-        contState: Any?, mode: Int, doYield: Boolean = false,
-        block: () -> Unit
+    contState: Any?, mode: Int, doYield: Boolean = false,
+    block: () -> Unit
 ): Boolean {
     val eventLoop = ThreadLocalEventLoop.eventLoop
     // If we are yielding and unconfined queue is empty, we can bail out as part of fast path

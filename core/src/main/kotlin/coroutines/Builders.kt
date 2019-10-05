@@ -52,6 +52,64 @@ public fun CoroutineScope.launch(
     return coroutine
 }
 
+// --------------- async ---------------
+
+/**
+ * Creates a coroutine and returns its future result as an implementation of [Deferred].
+ * The running coroutine is cancelled when the resulting deferred is [cancelled][Job.cancel].
+ * The resulting coroutine has a key difference compared with similar primitives in other languages
+ * and frameworks: it cancels the parent job (or outer scope) on failure to enforce *structured concurrency* paradigm.
+ * To change that behaviour, supervising parent ([SupervisorJob] or [supervisorScope]) can be used.
+ *
+ * Coroutine context is inherited from a [CoroutineScope], additional context elements can be specified with [context] argument.
+ * If the context does not have any dispatcher nor any other [ContinuationInterceptor], then [Dispatchers.Default] is used.
+ * The parent job is inherited from a [CoroutineScope] as well, but it can also be overridden
+ * with corresponding [coroutineContext] element.
+ *
+ * By default, the coroutine is immediately scheduled for execution.
+ * Other options can be specified via `start` parameter. See [CoroutineStart] for details.
+ * An optional [start] parameter can be set to [CoroutineStart.LAZY] to start coroutine _lazily_. In this case,
+ * the resulting [Deferred] is created in _new_ state. It can be explicitly started with [start][Job.start]
+ * function and will be started implicitly on the first invocation of [join][Job.join], [await][Deferred.await] or [awaitAll].
+ *
+ * @param block the coroutine code.
+ */
+public fun <T> CoroutineScope.async(
+        context: CoroutineContext = EmptyCoroutineContext,
+        start: CoroutineStart = CoroutineStart.DEFAULT,
+        block: suspend CoroutineScope.() -> T
+): Deferred<T> {
+    val newContext = newCoroutineContext(context)
+    val coroutine = if (start.isLazy)
+        LazyDeferredCoroutine(newContext, block) else
+        DeferredCoroutine<T>(newContext, active = true)
+    coroutine.start(start, coroutine, block)
+    return coroutine
+}
+
+@Suppress("UNCHECKED_CAST")
+private open class DeferredCoroutine<T>(
+        parentContext: CoroutineContext,
+        active: Boolean
+) : AbstractCoroutine<T>(parentContext, active), Deferred<T>/*, SelectClause1<T>*/ {
+    override fun getCompleted(): T = getCompletedInternal() as T
+    override suspend fun await(): T = awaitInternal() as T
+//    override val onAwait: SelectClause1<T> get() = this
+//    override fun <R> registerSelectClause1(select: SelectInstance<R>, block: suspend (T) -> R) =
+//            registerSelectClause1Internal(select, block)
+}
+
+private class LazyDeferredCoroutine<T>(
+        parentContext: CoroutineContext,
+        block: suspend CoroutineScope.() -> T
+) : DeferredCoroutine<T>(parentContext, active = false) {
+    private val continuation = block.createCoroutineUnintercepted(this, this)
+
+    override fun onStart() {
+        continuation.startCoroutineCancellable(this)
+    }
+}
+
 /**
  * Runs a new coroutine and **blocks** the current thread _interruptibly_ until its completion.
  * This function should not be used from a coroutine. It is designed to bridge regular blocking code
@@ -97,13 +155,13 @@ public fun <T> runBlocking(context: CoroutineContext = EmptyCoroutineContext, bl
 }
 
 private class BlockingCoroutine<T>(
-    parentContext: CoroutineContext,
-    private val blockedThread: Thread,
-    private val eventLoop: EventLoop?
+        parentContext: CoroutineContext,
+        private val blockedThread: Thread,
+        private val eventLoop: EventLoop?
 ) : AbstractCoroutine<T>(parentContext, true) {
     override val isScopedCoroutine: Boolean get() = true
 
-    override fun afterCompletionInternal(state: Any?, mode: Int) {
+    override fun afterCompletion(state: Any?) {
         // wake up blocked thread
         if (Thread.currentThread() != blockedThread)
             LockSupport.unpark(blockedThread)
