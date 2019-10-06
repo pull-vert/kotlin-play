@@ -1,7 +1,6 @@
 package coroutines.internal
 
 import coroutines.*
-import coroutines.CompletedExceptionally
 import coroutines.CoroutinesInternalError
 import coroutines.scheduling.SchedulerTask
 import coroutines.withCoroutineContext
@@ -21,16 +20,13 @@ internal abstract class DispatchedTask<in T>(
 ) : SchedulerTask() {
     internal abstract val delegate: Continuation<T>
 
-    internal abstract fun takeState(): Any?
+    internal abstract fun takeState(): DispatchedState<in T>
 
     internal open fun cancelResult(state: Any?, cause: Throwable) {}
 
     @Suppress("UNCHECKED_CAST")
-    internal open fun <T> getSuccessfulResult(state: Any?): T =
-            state as T
-
-    internal fun getExceptionalResult(state: Any?): Throwable? =
-            (state as? CompletedExceptionally)?.cause
+    internal open fun <T> getSuccessfulResult(state: DispatchedState<in T>): T =
+            state.value as T
 
     public final override fun run() {
         val taskContext = this.taskContext
@@ -41,7 +37,7 @@ internal abstract class DispatchedTask<in T>(
             val context = continuation.context
             val state = takeState() // NOTE: Must take state in any case, even if cancelled
             withCoroutineContext(context, delegate.countOrElement) {
-                val exception = getExceptionalResult(state)
+                val exception = state.exceptionOrNull()
                 val job = if (resumeMode.isCancellableMode) context[Job] else null
                 /*
                  * Check whether continuation was originally resumed with an exception.
@@ -117,7 +113,7 @@ internal fun <T> DispatchedTask<T>.dispatch(mode: Int) {
 internal fun <T> DispatchedTask<T>.resume(delegate: Continuation<T>, useMode: Int) {
     // slow-path - use delegate
     val state = takeState()
-    val exception = getExceptionalResult(state)?.let { recoverStackTrace(it, delegate) }
+    val exception = state.exceptionOrNull()?.let { recoverStackTrace(it, delegate) }
     val result = if (exception != null) Result.failure(exception) else Result.success(state as T)
     when (useMode) {
         MODE_ATOMIC_DEFAULT -> delegate.resumeWith(result)
@@ -127,7 +123,7 @@ internal fun <T> DispatchedTask<T>.resume(delegate: Continuation<T>, useMode: In
     }
 }
 
-private fun DispatchedTask<*>.resumeUnconfined() {
+private fun <T> DispatchedTask<T>.resumeUnconfined() {
     val eventLoop = ThreadLocalEventLoop.eventLoop
     if (eventLoop.isUnconfinedLoopActive) {
         // When unconfined loop is active -- dispatch continuation for execution to avoid stack overflow

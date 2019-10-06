@@ -11,18 +11,16 @@ import kotlin.coroutines.Continuation
 import kotlin.coroutines.resumeWithException
 
 //@SharedImmutable
-private val UNDEFINED = Symbol("UNDEFINED")
-//@SharedImmutable
 @JvmField
 internal val REUSABLE_CLAIMED = Symbol("REUSABLE_CLAIMED")
 
-internal class DispatchedContinuation<in T>(
+internal class DispatchedContinuation<T>(
     @JvmField val dispatcher: CoroutineDispatcher,
     @JvmField val continuation: Continuation<T>
 ) : DispatchedTask<T>(MODE_ATOMIC_DEFAULT), CoroutineStackFrame, Continuation<T> by continuation {
-    @JvmField
+//    @JvmField
     @Suppress("PropertyName")
-    internal var _state: Any? = UNDEFINED
+    internal var _state: DispatchedState<in T> = DispatchedState.undefined()
     override val callerFrame: CoroutineStackFrame? = continuation as? CoroutineStackFrame
     override fun getStackTraceElement(): StackTraceElement? = null
     @JvmField // pre-cached value to avoid ctx.fold on every resumption
@@ -149,10 +147,10 @@ internal class DispatchedContinuation<in T>(
         }
     }
 
-    override fun takeState(): Any? {
+    override fun takeState(): DispatchedState<in T> {
         val state = _state
-        assert { state !== UNDEFINED } // fail-fast if repeatedly invoked
-        _state = UNDEFINED
+        assert { state.isNotUndefined } // fail-fast if repeatedly invoked
+        _state = DispatchedState.undefined()
         return state
     }
 
@@ -214,7 +212,7 @@ internal class DispatchedContinuation<in T>(
     // used by "yield" implementation
     internal fun dispatchYield(value: T) {
         val context = continuation.context
-        _state = value
+        _state = DispatchedState.success(value)
         resumeMode = MODE_CANCELLABLE
         dispatcher.dispatchYield(context, this)
     }
@@ -236,7 +234,7 @@ public fun <T> Continuation<T>.resumeCancellableWith(result: Result<T>) = when (
 }
 
 internal fun DispatchedContinuation<Unit>.yieldUndispatched(): Boolean =
-    executeUnconfined(Unit, MODE_CANCELLABLE, doYield = true) {
+    executeUnconfined(DispatchedState.success(Unit), MODE_CANCELLABLE, doYield = true) {
         run()
     }
 
@@ -246,8 +244,8 @@ internal fun DispatchedContinuation<Unit>.yieldUndispatched(): Boolean =
  * [doYield] indicates whether current continuation is yielding (to provide fast-path if event-loop is empty).
  * Returns `true` if execution of continuation was queued (trampolined) or `false` otherwise.
  */
-private inline fun DispatchedContinuation<*>.executeUnconfined(
-    contState: Any?, mode: Int, doYield: Boolean = false,
+private inline fun <T> DispatchedContinuation<T>.executeUnconfined(
+    contState: DispatchedState<T>, mode: Int, doYield: Boolean = false,
     block: () -> Unit
 ): Boolean {
     val eventLoop = ThreadLocalEventLoop.eventLoop
