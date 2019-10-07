@@ -7,12 +7,13 @@ inline class MultiIntICollection(private val value: IntArray) : Collection<Int> 
     override fun contains(element: Int) = value.contains(element)
 
     override fun containsAll(elements: Collection<Int>): Boolean {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        for (element in elements) {
+            if (!value.contains(element)) return false
+        }
+        return true
     }
 
-    override fun isEmpty(): Boolean {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
-    }
+    override fun isEmpty() = false
 
-    override fun iterator(): Iterator<Int> = value.iterator()
+    override fun iterator() = value.iterator()
 }

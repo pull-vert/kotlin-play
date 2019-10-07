@@ -6,8 +6,12 @@ inline class SingleIntCollection(private val value: Int) : Collection<Int> {
 
     override fun contains(element: Int) = value == element
 
-    override fun containsAll(elements: Collection<Int>) =
-            elements.size == 1 && elements.iterator().next() == value
+    override fun containsAll(elements: Collection<Int>): Boolean {
+        for (element in elements) {
+            if (element != value) return false
+        }
+        return true
+    }
 
     override fun isEmpty() = false
 

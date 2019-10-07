@@ -18,7 +18,9 @@ class SingleIntCollectionTest {
         assertFalse(singleIntCollection.isEmpty())
         assertFalse(singleIntCollection.contains(3))
         assertTrue(singleIntCollection.contains(initialValue))
-        assertFalse(singleIntCollection.containsAll(setOf()))
-        assertTrue(singleIntCollection.containsAll(setOf(42)))
+        assertTrue(singleIntCollection.containsAll(setOf()))
+        assertTrue(singleIntCollection.containsAll(setOf(initialValue)))
+        assertTrue(singleIntCollection.containsAll(listOf(initialValue, initialValue)))
+        assertFalse(singleIntCollection.containsAll(listOf(initialValue, 3)))
     }
 }
