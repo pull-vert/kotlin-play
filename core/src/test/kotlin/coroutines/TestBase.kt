@@ -5,9 +5,8 @@
 package coroutines
 
 import coroutines.internal.systemProp
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.BeforeAll
+import kotlin.test.*
 import java.util.*
 import java.util.concurrent.CancellationException
 import java.util.concurrent.atomic.*
@@ -128,7 +127,7 @@ public open class TestBase {
         finished.set(false)
     }
 
-    @BeforeEach
+    @BeforeTest
     fun before() {
         initPoolsBeforeTest()
         threadsBefore = currentThreads()
@@ -140,7 +139,7 @@ public open class TestBase {
         }
     }
 
-    @AfterEach
+    @AfterTest
     fun onCompletion() {
         // onCompletion should not throw exceptions before it finishes all cleanup, so that other tests always
         // start in a clear, restored state

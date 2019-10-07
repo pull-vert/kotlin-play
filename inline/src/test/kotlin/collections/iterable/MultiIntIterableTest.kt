@@ -1,7 +1,6 @@
 package collections
 
-import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.Test
+import kotlin.test.*
 
 class MultiIntIterableTest {
 
@@ -13,6 +12,8 @@ class MultiIntIterableTest {
         for (value in singleIntIterable) {
             values.add(value)
         }
-        assertIterableEquals(initialValue.asIterable(), values)
+        assertEquals(2, values.size)
+        assertEquals(1, values[0])
+        assertEquals(2, values[1])
     }
 }

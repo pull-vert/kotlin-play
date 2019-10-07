@@ -1,22 +1,8 @@
 apply plugin: 'kotlinx-atomicfu'
 
-dependencies {
-    testImplementation "org.junit.jupiter:junit-jupiter-api:$junit_version"
-
-    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:$junit_version"
-}
-
 atomicfu {
     variant = "FU" // JVM transformation variant: FU,VH, or BOTH
     verbose = false // set to true to be more verbose
-}
-
-test {
-    useJUnitPlatform()
-    testLogging {
-        events 'passed', 'failed', 'skipped'
-        showStandardStreams = true
-    }
 }
 
 compileKotlin {

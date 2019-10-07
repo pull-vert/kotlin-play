@@ -4,10 +4,8 @@
 
 package coroutines
 
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Test
 import kotlin.coroutines.*
+import kotlin.test.*
 
 @Suppress("DEPRECATION") // cancel(cause)
 class AbstractCoroutineTest : TestBase() {

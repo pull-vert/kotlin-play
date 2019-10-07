@@ -6,8 +6,7 @@
 
 package coroutines
 
-import org.junit.jupiter.api.Assertions.*
-import org.junit.jupiter.api.Test
+import kotlin.test.*
 import java.util.concurrent.CancellationException
 
 @Suppress("DEPRECATION") // cancel(cause)

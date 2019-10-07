@@ -6,10 +6,7 @@
 
 package coroutines
 
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Disabled
-import org.junit.jupiter.api.Test
+import kotlin.test.*
 import java.util.concurrent.CancellationException
 
 
@@ -17,7 +14,6 @@ import java.util.concurrent.CancellationException
  * Test for [CancellableContinuation.resume] with `onCancellation` parameter.
  */
 class CancellableResumeTest : TestBase() {
-    @Disabled
     @Test
     fun testResumeImmediateNormally() = runTest {
         expect(1)
@@ -50,7 +46,6 @@ class CancellableResumeTest : TestBase() {
         expectUnreached()
     }
 
-    @Disabled
     @Test
     fun testResumeLaterNormally() = runTest {
         expect(1)
@@ -97,7 +92,6 @@ class CancellableResumeTest : TestBase() {
         expect(8)
     }
 
-    @Disabled
     @Test
     fun testResumeCancelWhileDispatched() = runTest {
         expect(1)

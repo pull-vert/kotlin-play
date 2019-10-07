@@ -4,8 +4,7 @@
 
 package coroutines
 
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Test
+import kotlin.test.*
 
 class AtomicCancellationCommonTest : TestBase() {
     @Test
