@@ -6,9 +6,10 @@ inline class SingleIntCollection(private val value: Int) : Collection<Int> {
 
     override fun contains(element: Int) = value == element
 
-    override fun containsAll(elements: Collection<Int>) = elements.size == 1 && elements.contains(value)
+    override fun containsAll(elements: Collection<Int>) =
+            elements.size == 1 && elements.iterator().next() == value
 
     override fun isEmpty() = false
 
-    override fun iterator() : Iterator<Int> = SingleIntIterator(value)
+    override fun iterator() = SingleIntIterator(value)
 }

@@ -1,5 +1,5 @@
 package collections
 
 inline class MultiIntIterable(private val value: IntArray) : Iterable<Int> {
-    override fun iterator(): Iterator<Int> = value.iterator()
+    override fun iterator() = value.iterator()
 }
